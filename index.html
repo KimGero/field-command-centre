@@ -1,24 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-X8RSQFS80B"></script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-X8RSQFS80B"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
 
   gtag('config', 'G-X8RSQFS80B');
-</script>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
-  <title>Field Command Centre v4</title>
+  <title>Ojola Command Centre v4</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700;800;900&family=Barlow:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://js.paystack.co/v1/inline.js"></script>
 
   <!-- ══════════════════════════════════════════════
        GOOGLE ANALYTICS — replace YOUR_GA_ID below
@@ -135,7 +134,7 @@
     .alert-card{animation:borderGlow 2.5s infinite;}
 
     /* RESPONSIVE NAV */
-    .nav-btn{background:none;border:none;cursor:pointer;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;border-radius:4px;transition:all 0.15s;color:var(--text3);white-space:nowrap;}
+    .nav-btn{background:none;border:none;cursor:pointer;padding:8px 9px;font-family:'Share Tech Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:0.06em;border-radius:4px;transition:all 0.15s;color:var(--text3);white-space:nowrap;}
     .nav-btn:hover{color:var(--text);background:var(--nav-active-bg);}
     .nav-btn.active{color:var(--accent);background:var(--nav-active-bg);border-bottom:2px solid var(--accent);font-weight:700;}
 
@@ -874,7 +873,7 @@ function LandingPage({theme, setTheme, largeText, setLargeText, onEnter}){
           <div className="lp-mockup">
             <div className="lp-mockup-title">
               <span className="lp-pulse"/>
-              Ojola Residence · Live Dashboard
+              Ojola Ultra-Luxury Residence · Live Dashboard
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:"7px",marginBottom:"12px"}}>
               {[
@@ -5655,6 +5654,7 @@ function App(){
     {id:"risks",      label:"Risks & QA", icon:"⚠"},
     {id:"team",       label:"Team",       icon:"👷"},
     {id:"report",     label:"RE Report",  icon:"📄"},
+    {id:"payments",   label:"Payments",   icon:"💳"},
   ];
 
   // ── If landing page is shown, render it and stop ──
@@ -5718,7 +5718,7 @@ function App(){
       )}
 
       {/* HEADER */}
-      <header style={{borderBottom:"1px solid var(--border)",padding:"0 16px",background:"var(--header-bg)",display:"flex",alignItems:"center",gap:"8px",height:"54px",position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",overflow:"hidden",minWidth:0}}>        <button onClick={()=>setShowProjectPicker(s=>!s)} style={{display:"flex",alignItems:"center",gap:"10px",background:"none",border:"none",cursor:"pointer",paddingRight:"12px",borderRight:"1px solid var(--border)",marginRight:"4px",flexShrink:0,minWidth:0}}>
+      <header style={{borderBottom:"1px solid var(--border)",padding:"0 16px",background:"var(--header-bg)",display:"flex",alignItems:"center",gap:"8px",height:"54px",position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",overflow:"visible",minWidth:0}}>        <button onClick={()=>setShowProjectPicker(s=>!s)} style={{display:"flex",alignItems:"center",gap:"10px",background:"none",border:"none",cursor:"pointer",paddingRight:"12px",borderRight:"1px solid var(--border)",marginRight:"4px",flexShrink:0,minWidth:0}}>
           <div style={{display:"flex",flexDirection:"column",gap:"2px",flexShrink:0}}>
             <div style={{display:"flex",gap:"2px"}}>{["#E53E3E","#D69E2E","#38A169"].map((c,j)=><div key={j} style={{width:"7px",height:"7px",background:c,borderRadius:"1px",opacity:0.8}}/>)}</div>
             <div style={{display:"flex",gap:"2px"}}>{["#3182CE","#805AD5","#D69E2E"].map((c,j)=><div key={j} style={{width:"7px",height:"7px",background:c,borderRadius:"1px",opacity:0.8}}/>)}</div>
@@ -6202,6 +6202,9 @@ function App(){
         {/* ── RE REPORT ── */}
         {view==="report"&&<REReport site={site} phases={phases} wps={wps} risks={risks} snags={snags} team={team} diaries={diaries} materials={materials}/>}
 
+        {/* ── PAYMENTS ── */}
+        {view==="payments"&&<PaymentsView site={site}/>}
+
       </main>
 
       {/* MOBILE BOTTOM NAV */}
@@ -6215,6 +6218,296 @@ function App(){
           ))}
         </div>
       </nav>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════
+//  PAYMENTS VIEW  — Paystack (Card / M-Pesa) + M-Pesa Daraja
+// ══════════════════════════════════════════════════════════
+const PAYSTACK_KEY = "pk_test_63e1fcfd734d117a23475494ea27c8499d1eb634";
+
+function PaymentsView({ site }) {
+  const [form, setForm] = React.useState({ email: "", amount: "", name: "", description: "", phone: "" });
+  const [method, setMethod] = React.useState("card"); // "card" | "mpesa"
+  const [history, setHistory] = React.useState(() => {
+    try { return JSON.parse(localStorage.getItem("ojola_payments") || "[]"); } catch { return []; }
+  });
+  const [processing, setProcessing] = React.useState(false);
+  const [mpesaStatus, setMpesaStatus] = React.useState(null); // null | "pending" | "sent" | "error"
+
+  const saveToHistory = (entry) => {
+    const updated = [entry, ...history].slice(0, 100);
+    setHistory(updated);
+    try { localStorage.setItem("ojola_payments", JSON.stringify(updated)); } catch {}
+  };
+
+  const totalCollected = history.filter(h => h.status === "success").reduce((s, h) => s + h.amount, 0);
+  const pendingCount = history.filter(h => h.status === "pending").length;
+
+  const fmtK = n => "KES " + Number(n).toLocaleString("en-KE");
+
+  // ── Safely ensure Paystack script is loaded, then run callback ──
+  const loadPaystack = (cb) => {
+    if (window.PaystackPop) { cb(); return; }
+    const existing = document.querySelector('script[src*="paystack"]');
+    if (existing) {
+      // Script tag exists but hasn't finished — wait for it
+      existing.addEventListener("load", cb);
+      existing.addEventListener("error", () => { setProcessing(false); alert("Could not load Paystack. Check your internet connection."); });
+      return;
+    }
+    const s = document.createElement("script");
+    s.src = "https://js.paystack.co/v1/inline.js";
+    s.onload = cb;
+    s.onerror = () => { setProcessing(false); alert("Could not load Paystack. Check your internet connection."); };
+    document.head.appendChild(s);
+  };
+
+  // ── Paystack card / M-Pesa via Paystack ──
+  const handlePaystack = () => {
+    const amt = parseFloat(form.amount);
+    if (!form.email || !amt || amt < 1) {
+      alert("Please enter a valid email and amount."); return;
+    }
+    setProcessing(true);
+    loadPaystack(() => {
+      try {
+        const ref = "OJL-" + Date.now();
+        const handler = window.PaystackPop.setup({
+          key: PAYSTACK_KEY,
+          email: form.email,
+          amount: Math.round(amt * 100),
+          currency: "KES",
+          ref,
+          channels: ["card", "mobile_money", "bank_transfer"],
+          metadata: {
+            custom_fields: [
+              { display_name: "Client Name", variable_name: "client_name", value: form.name },
+              { display_name: "Project",     variable_name: "project",     value: site?.name || "Ojola" },
+              { display_name: "Description", variable_name: "description", value: form.description },
+            ]
+          },
+          callback: (response) => {
+            setProcessing(false);
+            saveToHistory({
+              id: response.reference,
+              date: new Date().toISOString(),
+              client: form.name || form.email,
+              email: form.email,
+              description: form.description || "Payment",
+              amount: amt,
+              method: "Card / Paystack",
+              status: "success",
+            });
+            setForm({ email: "", amount: "", name: "", description: "", phone: "" });
+            alert("✅ Payment successful! Ref: " + response.reference);
+          },
+          onClose: () => { setProcessing(false); },
+        });
+        handler.openIframe();
+      } catch(e) {
+        setProcessing(false);
+        alert("Paystack error: " + e.message);
+      }
+    });
+  };
+
+  // ── M-Pesa STK Push via Daraja (requires Netlify Function — shows instructions if not configured) ──
+  const handleMpesa = async () => {
+    const amt = parseFloat(form.amount);
+    if (!form.phone || !amt || amt < 1) {
+      alert("Please enter a valid Safaricom phone number and amount."); return;
+    }
+    const phone = form.phone.replace(/\D/g, "").replace(/^0/, "254").replace(/^(\+?254)/, "254");
+    setProcessing(true);
+    setMpesaStatus("pending");
+    try {
+      const res = await fetch("/.netlify/functions/mpesa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone,
+          amount: Math.round(amt),
+          description: form.description || `Payment to ${site?.name || "Ojola"}`,
+          ref: "OJL-" + Date.now(),
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMpesaStatus("sent");
+        saveToHistory({
+          id: data.CheckoutRequestID || ("MPE-" + Date.now()),
+          date: new Date().toISOString(),
+          client: form.name || form.phone,
+          email: form.email || "—",
+          description: form.description || "M-Pesa STK Push",
+          amount: amt,
+          method: "M-Pesa STK",
+          status: "pending",
+        });
+        setForm({ email: "", amount: "", name: "", description: "", phone: "" });
+        setTimeout(() => setMpesaStatus(null), 6000);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setMpesaStatus("error");
+        alert("M-Pesa error: " + (err.message || res.statusText) + "\n\nMake sure your Netlify Function is deployed and Daraja credentials are set.");
+        setTimeout(() => setMpesaStatus(null), 4000);
+      }
+    } catch (e) {
+      setMpesaStatus("error");
+      alert("Could not reach the M-Pesa function.\n\nDeploy the Netlify Function first (see Daraja setup guide).\n\n" + e.message);
+      setTimeout(() => setMpesaStatus(null), 4000);
+    }
+    setProcessing(false);
+  };
+
+  const statusColor = { success: "#38A169", pending: "#D69E2E", failed: "#E53E3E" };
+
+  return (
+    <div style={{ animation: "fadeUp 0.2s ease" }}>
+
+      {/* ── Summary strip ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "10px", marginBottom: "14px" }}>
+        {[
+          { label: "Total Collected", value: fmtK(totalCollected), color: "var(--green)" },
+          { label: "Transactions", value: history.filter(h => h.status === "success").length, color: "var(--accent)" },
+          { label: "Awaiting Confirmation", value: pendingCount, color: pendingCount > 0 ? "var(--amber)" : "var(--text4)" },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="card" style={{ padding: "14px 16px" }}>
+            <div style={{ fontSize: "20px", fontWeight: "900", color, lineHeight: 1 }}>{value}</div>
+            <div style={{ fontSize: "9px", color: "var(--text4)", fontFamily: "'Share Tech Mono',monospace", textTransform: "uppercase", marginTop: "4px" }}>{label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+
+        {/* ── Payment request form ── */}
+        <div className="card" style={{ padding: "18px" }}>
+          <div style={{ fontSize: "11px", fontWeight: "800", color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "14px", display: "flex", alignItems: "center", gap: "6px" }}>
+            💳 Request Payment
+          </div>
+
+          {/* Method toggle */}
+          <div style={{ display: "flex", gap: "6px", marginBottom: "14px" }}>
+            {[
+              { id: "card", label: "💳 Card / Paystack" },
+              { id: "mpesa", label: "📱 M-Pesa STK" },
+            ].map(m => (
+              <button key={m.id} onClick={() => setMethod(m.id)}
+                style={{ flex: 1, padding: "8px", border: `2px solid ${method === m.id ? "var(--accent)" : "var(--border)"}`, borderRadius: "5px", background: method === m.id ? "var(--accent-bg)" : "var(--bg)", color: method === m.id ? "var(--accent)" : "var(--text3)", fontFamily: "'Share Tech Mono',monospace", fontSize: "9px", fontWeight: "700", cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.05em", transition: "all 0.15s" }}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Form fields */}
+          {[
+            { key: "name", label: "Client Name", placeholder: "e.g. Acme Ltd", type: "text" },
+            { key: "email", label: method === "card" ? "Email (required)" : "Email (optional)", placeholder: "client@example.com", type: "email" },
+            { key: "amount", label: "Amount (KES)", placeholder: "e.g. 150000", type: "number" },
+            { key: "description", label: "Description", placeholder: "e.g. Phase 2 deposit", type: "text" },
+            ...(method === "mpesa" ? [{ key: "phone", label: "Safaricom Number", placeholder: "07XX XXX XXX", type: "tel" }] : []),
+          ].map(({ key, label, placeholder, type }) => (
+            <div key={key} style={{ marginBottom: "10px" }}>
+              <div style={{ fontSize: "9px", color: "var(--text4)", fontFamily: "'Share Tech Mono',monospace", textTransform: "uppercase", marginBottom: "4px" }}>{label}</div>
+              <input
+                type={type}
+                value={form[key]}
+                placeholder={placeholder}
+                onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+                style={{ width: "100%", padding: "8px 10px", background: "var(--input-bg)", border: "1px solid var(--border)", borderRadius: "4px", color: "var(--text)", fontFamily: "'Barlow',sans-serif", fontSize: "12px", outline: "none" }}
+              />
+            </div>
+          ))}
+
+          {/* M-Pesa status message */}
+          {mpesaStatus === "sent" && (
+            <div style={{ background: "var(--green)15", border: "1px solid var(--green)44", borderRadius: "5px", padding: "10px 12px", marginBottom: "10px", fontSize: "11px", color: "var(--green)", fontWeight: "700" }}>
+              ✅ STK Push sent! Ask the client to check their phone and enter their M-Pesa PIN.
+            </div>
+          )}
+          {mpesaStatus === "error" && (
+            <div style={{ background: "var(--red)15", border: "1px solid var(--red)44", borderRadius: "5px", padding: "10px 12px", marginBottom: "10px", fontSize: "11px", color: "var(--red)", fontWeight: "700" }}>
+              ❌ STK Push failed. Check your Daraja credentials in the Netlify Function.
+            </div>
+          )}
+
+          <button
+            onClick={method === "card" ? handlePaystack : handleMpesa}
+            disabled={processing}
+            style={{ width: "100%", padding: "11px", background: processing ? "var(--border)" : method === "card" ? "var(--accent)" : "var(--green)", color: "#fff", border: "none", borderRadius: "5px", fontFamily: "'Share Tech Mono',monospace", fontSize: "11px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.08em", cursor: processing ? "not-allowed" : "pointer", transition: "all 0.15s" }}>
+            {processing ? "Processing…" : method === "card" ? "▶ Open Paystack Checkout" : "📱 Send M-Pesa STK Push"}
+          </button>
+
+          {method === "mpesa" && (
+            <div style={{ marginTop: "10px", padding: "10px", background: "var(--amber)10", border: "1px solid var(--amber)33", borderRadius: "4px", fontSize: "9px", color: "var(--text3)", fontFamily: "'Share Tech Mono',monospace", lineHeight: 1.6 }}>
+              ⚠ M-Pesa STK requires the Netlify Function to be deployed with your Daraja Consumer Key, Secret, Shortcode & Passkey. See setup guide above.
+            </div>
+          )}
+        </div>
+
+        {/* ── Payment history ── */}
+        <div className="card" style={{ padding: "18px" }}>
+          <div style={{ fontSize: "11px", fontWeight: "800", color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>📜 Payment History</span>
+            {history.length > 0 && (
+              <button onClick={() => { if (confirm("Clear all payment history?")) { setHistory([]); localStorage.removeItem("ojola_payments"); } }}
+                style={{ background: "var(--red)15", border: "1px solid var(--red)44", color: "var(--red)", padding: "3px 8px", borderRadius: "3px", fontFamily: "'Share Tech Mono',monospace", fontSize: "8px", fontWeight: "700", cursor: "pointer", textTransform: "uppercase" }}>
+                Clear
+              </button>
+            )}
+          </div>
+          {history.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "32px 16px", color: "var(--text4)", fontFamily: "'Share Tech Mono',monospace", fontSize: "10px" }}>
+              No payments yet.<br />Requests you initiate will appear here.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "420px", overflowY: "auto" }}>
+              {history.map((h, i) => (
+                <div key={i} style={{ padding: "10px 12px", background: "var(--bg)", borderRadius: "5px", borderLeft: `3px solid ${statusColor[h.status] || "var(--border)"}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div>
+                      <div style={{ fontSize: "12px", fontWeight: "800", color: "var(--text)" }}>{h.client}</div>
+                      <div style={{ fontSize: "9px", color: "var(--text4)", fontFamily: "'Share Tech Mono',monospace", marginTop: "2px" }}>{h.description}</div>
+                      <div style={{ fontSize: "9px", color: "var(--text4)", fontFamily: "'Share Tech Mono',monospace" }}>{h.method} · {new Date(h.date).toLocaleDateString("en-KE")}</div>
+                    </div>
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <div style={{ fontSize: "14px", fontWeight: "900", color: statusColor[h.status] || "var(--text)" }}>{fmtK(h.amount)}</div>
+                      <div style={{ fontSize: "8px", fontWeight: "700", color: statusColor[h.status] || "var(--text4)", textTransform: "uppercase", fontFamily: "'Share Tech Mono',monospace" }}>{h.status}</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: "8px", color: "var(--text4)", fontFamily: "'Share Tech Mono',monospace", marginTop: "4px", wordBreak: "break-all" }}>{h.id}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Daraja setup guide ── */}
+      <div className="card" style={{ padding: "18px", marginTop: "14px" }}>
+        <div style={{ fontSize: "11px", fontWeight: "800", color: "var(--amber)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>
+          📋 M-Pesa / Daraja Setup Checklist
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: "10px" }}>
+          {[
+            { step: "1", title: "Register on Daraja", desc: "developer.safaricom.co.ke → Create App → enable M-Pesa Express" },
+            { step: "2", title: "Create Netlify Function", desc: "Add functions/mpesa.js to your project with Consumer Key, Secret, Shortcode & Passkey as env vars" },
+            { step: "3", title: "Set Env Vars in Netlify", desc: "Netlify Dashboard → Site Settings → Environment Variables → add MPESA_CONSUMER_KEY, MPESA_CONSUMER_SECRET, MPESA_SHORTCODE, MPESA_PASSKEY" },
+            { step: "4", title: "Go Live on Daraja", desc: "Apply for production shortcode via Safaricom Business portal once testing is complete" },
+          ].map(({ step, title, desc }) => (
+            <div key={step} style={{ display: "flex", gap: "10px", padding: "10px", background: "var(--bg)", borderRadius: "5px" }}>
+              <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "var(--amber)20", border: "1px solid var(--amber)44", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Share Tech Mono',monospace", fontSize: "10px", fontWeight: "800", color: "var(--amber)", flexShrink: 0 }}>{step}</div>
+              <div>
+                <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text)" }}>{title}</div>
+                <div style={{ fontSize: "10px", color: "var(--text3)", marginTop: "2px", lineHeight: 1.4 }}>{desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
