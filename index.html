@@ -4011,9 +4011,9 @@ const FCC_CONFIG = {
   supabaseKey:     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkc3dqenRxY3dncHZtd3FjempsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwOTMzMTIsImV4cCI6MjA4ODY2OTMxMn0.c7vEV9QmpetxxENUyB5ybE55kv_2vS7JjxPUSt1Rzu0",   // anon/public key
 
   // ── M-Pesa Daraja (primary Kenya payment) ──────────────────────
-  mpesaRelayUrl:   "",   // URL of your /mpesa-relay Supabase Edge Function
+  mpesaRelayUrl:   "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest",   // URL of your /mpesa-relay Supabase Edge Function
   mpesaShortcode:  "174379",   // Lipa Na M-Pesa shortcode (174379 = sandbox)
-  mpesaPasskey:    "",   // From Daraja portal (sandbox has a default)
+  mpesaPasskey:    "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919",   // From Daraja portal (sandbox has a default)
   mpesaEnv:        "sandbox",  // "sandbox" | "live"
 
   // ── Paystack fallback (cards + M-Pesa via Paystack) ────────────
