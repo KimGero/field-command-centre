@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-  <title>AHP Command Centre v4</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <title>Field Command Centre v4</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700;800;900&family=Barlow:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -16,7 +16,7 @@
        with your Measurement ID (e.g. G-XXXXXXXXXX)
        Get one free at analytics.google.com
   ══════════════════════════════════════════════ -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-5MG4F81972"></script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=YOUR_GA_ID"></script>
   <script>
     window.dataLayer=window.dataLayer||[];
     function gtag(){dataLayer.push(arguments);}
@@ -115,6 +115,7 @@
 
     @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
     @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
     @keyframes pulse2{0%,100%{opacity:1}50%{opacity:0.4}}
     @keyframes borderGlow{0%,100%{border-color:var(--red)28}50%{border-color:var(--red)aa}}
     @keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
@@ -207,7 +208,7 @@
     .burn-bar-fill{height:100%;border-radius:4px;transition:width 0.8s ease;}
 
     /* MOBILE BOTTOM NAV */
-    .mobile-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--header-bg);border-top:1px solid var(--border);z-index:200;padding:0;padding-bottom:env(safe-area-inset-bottom);}
+    .mobile-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--header-bg);border-top:1px solid var(--border);z-index:200;padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px);}
     .mobile-nav-inner{display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
     .mobile-nav-inner::-webkit-scrollbar{display:none;}
     .mob-nav-btn{flex:0 0 auto;background:none;border:none;cursor:pointer;padding:10px 16px;font-family:'Share Tech Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text4);display:flex;flex-direction:column;align-items:center;gap:3px;min-width:56px;}
@@ -215,21 +216,49 @@
     .mob-nav-icon{font-size:18px;line-height:1;}
 
     /* RESPONSIVE */
+    /* ── GLOBAL ANDROID/MOBILE GUARDS ── */
+    *{-webkit-tap-highlight-color:transparent;}
+    html{overflow-x:hidden;}
+    body{overflow-x:hidden;-webkit-overflow-scrolling:touch;}
+    #root{overflow-x:hidden;}
+
     @media(max-width:768px){
       .mobile-nav{display:block;}
       .desktop-nav{display:none !important;}
-      main{padding:12px 12px 72px !important;}
+      /* Safe-area-aware bottom padding (Android nav bar + bottom nav) */
+      main{padding:12px 12px calc(64px + env(safe-area-inset-bottom,0px)) 12px !important;}
       .page-grid-2{grid-template-columns:1fr !important;}
       .page-grid-3{grid-template-columns:1fr 1fr !important;}
       .page-grid-5{grid-template-columns:1fr 1fr !important;}
       .page-grid-4{grid-template-columns:1fr 1fr !important;}
-      .gantt-label{width:100px !important;font-size:8px !important;}
+      .gantt-label{width:80px !important;font-size:8px !important;}
       .hide-mobile{display:none !important;}
+      /* Header: stop flex children from overflowing on narrow screens */
+      header{overflow:hidden;padding:0 10px !important;}
+      header>*{flex-shrink:1;min-width:0;}
+      /* Share modal: single column on mobile */
+      .share-channels{grid-template-columns:1fr !important;}
+      .share-modal{padding:16px !important;width:94vw !important;}
+      /* Tables: horizontal scroll instead of layout break */
+      .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;}
+      .tbl-wrap table{min-width:480px;}
+      /* Prevent card overflow */
+      .card,.edit-row{max-width:100%;overflow:hidden;word-break:break-word;}
+      /* Toast: wrap text, don't clip off screen */
+      .toast{max-width:90vw;white-space:normal;text-align:center;font-size:10px;padding:9px 14px;}
+      /* Auth split: stack on mobile */
+      .auth-split-right{display:none !important;}
+      .auth-form-panel{width:100% !important;max-width:100% !important;}
     }
     @media(max-width:480px){
+      .page-grid-2{grid-template-columns:1fr !important;}
       .page-grid-3{grid-template-columns:1fr !important;}
       .page-grid-4{grid-template-columns:1fr 1fr !important;}
       .page-grid-5{grid-template-columns:1fr 1fr !important;}
+      /* Larger tap targets on small Android phones (min 44px) */
+      .mob-nav-btn{min-width:44px;padding:10px 10px;}
+      .nav-btn{padding:10px 8px;}
+      button,select,input{min-height:36px;}
     }
     textarea.field-input{resize:vertical;min-height:72px;line-height:1.5;}
 
@@ -750,12 +779,13 @@ function LandingPage({theme, setTheme, largeText, setLargeText, onEnter}){
   };
 
   const phases=[
-    {label:"PH1 Site Prep",        pct:100, col:"var(--green)"},
-    {label:"PH2 Substructure",      pct:100, col:"var(--green)"},
-    {label:"PH3 Superstr. 1&2",    pct:68,  col:"var(--amber)"},
-    {label:"PH4 Superstr. 3&4",    pct:28,  col:"var(--accent)"},
-    {label:"PH5 MEP & Roof",       pct:18,  col:"var(--accent)"},
-    {label:"PH6 Finishes",         pct:5,   col:"var(--red)"},
+    {label:"PH1 Design & Approvals",  pct:100, col:"var(--green)"},
+    {label:"PH2 Foundation",           pct:100, col:"var(--green)"},
+    {label:"PH3 Superstructure",       pct:72,  col:"var(--amber)"},
+    {label:"PH4 Roof Structure",       pct:45,  col:"var(--accent)"},
+    {label:"PH5 MEP Services",         pct:30,  col:"var(--accent)"},
+    {label:"PH6 Int. Finishes",        pct:15,  col:"var(--red)"},
+    {label:"PH9 Pool & Spa",           pct:35,  col:"var(--accent)"},
   ];
 
   return(
@@ -798,7 +828,7 @@ function LandingPage({theme, setTheme, largeText, setLargeText, onEnter}){
       <section className="lp-hero lp-above" id="lp-hero">
         <div className="lp-eyebrow">
           <span className="lp-pulse"/>
-          Tactical Project Intelligence · Site-Native · Kenya AHP Programme
+          Tactical Project Intelligence · Site-Native · Kisumu Ojola · Private Elite Residence
         </div>
         <h1 className="lp-h1">
           FIELD<br/>
@@ -806,7 +836,7 @@ function LandingPage({theme, setTheme, largeText, setLargeText, onEnter}){
           CENTER
         </h1>
         <p className="lp-sub">
-          The full-stack construction command system built for Resident Engineers managing complex housing programmes in the field — not behind a desk.
+          The full-stack construction command system for elite private residences — giving the Project Manager, RE and client total site intelligence from foundation to handover.
         </p>
         <div className="lp-actions">
           <button className="lp-btn-primary" onClick={onEnter}>
@@ -818,8 +848,8 @@ function LandingPage({theme, setTheme, largeText, setLargeText, onEnter}){
         </div>
         <div className="lp-stats">
           {[
-            {val:191, label:"Housing Units Tracked"},
-            {val:8,   label:"Construction Phases"},
+            {val:1, label:"Ultra-Luxury Residence"},
+            {val:10,  label:"Construction Phases"},
             {val:6,   label:"Format Integrations"},
             {val:8,   label:"Optimised Themes"},
           ].map(s=>(
@@ -835,14 +865,14 @@ function LandingPage({theme, setTheme, largeText, setLargeText, onEnter}){
           <div className="lp-mockup">
             <div className="lp-mockup-title">
               <span className="lp-pulse"/>
-              Rongo New Town AHP · Live Dashboard
+              Ojola Residence · Live Dashboard
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:"7px",marginBottom:"12px"}}>
               {[
-                {l:"Overall",   v:"43%",    c:"var(--amber)"},
-                {l:"Spent",     v:"KES 434M",c:"var(--green)"},
-                {l:"Days Left", v:"481",    c:"var(--accent)"},
-                {l:"Open Risks",v:"4",      c:"var(--red)"},
+                {l:"Overall",   v:"32%",       c:"var(--amber)"},
+                {l:"Spent",     v:"KES 24.8M", c:"var(--green)"},
+                {l:"Days Left", v:"448",        c:"var(--accent)"},
+                {l:"Open Risks",v:"6",          c:"var(--red)"},
               ].map(s=>(
                 <div key={s.l} className="lp-mstat">
                   <div className="lp-mstat-l">{s.l}</div>
@@ -863,13 +893,13 @@ function LandingPage({theme, setTheme, largeText, setLargeText, onEnter}){
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"7px",marginTop:"10px"}}>
               <div className="lp-mstat">
                 <div className="lp-mstat-l">Latest Diary</div>
-                <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text)",marginTop:"2px"}}>07 Mar 2026</div>
-                <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--green)",marginTop:"1px"}}>☀ Sunny · 147 workers</div>
+                <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text)",marginTop:"2px"}}>20 Nov 2025</div>
+                <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--green)",marginTop:"1px"}}>⛅ Partly Cloudy · 18 workers</div>
               </div>
               <div className="lp-mstat" style={{border:"1px solid var(--red)33"}}>
                 <div className="lp-mstat-l">⚠ Alert</div>
-                <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--red)",marginTop:"2px"}}>WP011 Blocked</div>
-                <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text3)",marginTop:"1px"}}>Tiling pending plumbing</div>
+                <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--red)",marginTop:"2px"}}>SN008 — Pool Fail</div>
+                <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text3)",marginTop:"1px"}}>72hr pressure test 6mm drop</div>
               </div>
             </div>
             <div style={{marginTop:"8px",fontFamily:"'Share Tech Mono',monospace",fontSize:"7px",color:"var(--text4)",textAlign:"right"}}>
@@ -1061,7 +1091,7 @@ function LandingPage({theme, setTheme, largeText, setLargeText, onEnter}){
               ["PIN Security",    "4-digit team access PIN lock"],
               ["Multi-project",   "Unlimited projects · instant switcher"],
               ["Photo Capture",   "Native camera · gallery · captioned thumbnails"],
-              ["Context",         "Kenya AHP Programme · East Africa"],
+              ["Context",         "Kisumu Ojola · Private Elite Residence · East Africa"],
             ].map(([k,v],i)=>(
               <div key={k} className={`lp-spec-row lp-reveal${i%2===1?" lp-d1":""}`}>
                 <span className="lp-spec-key">{k}</span>
@@ -1103,7 +1133,7 @@ function LandingPage({theme, setTheme, largeText, setLargeText, onEnter}){
             <button key={l} onClick={()=>scrollTo(id)}>{l}</button>
           ))}
         </div>
-        <div className="lp-footer-sig">Built for Resident Engineers · Kenya AHP · 2026</div>
+        <div className="lp-footer-sig">Built for Resident Engineers · Kisumu Ojola · 2026</div>
       </footer>
     </div>
   );
@@ -1160,34 +1190,49 @@ const PROV_SCC={
 
 // ── DEFAULT PROVISIONS DATA ───────────────────────────────────────────────────
 const RONGO_PROVISIONS = {
-  contingency:{ allocated:47700000, committed:17500000, expended:12400000,
-    description:"5% project contingency — SDHUD approved" },
+  contingency:{ allocated:4680000, committed:2100000, expended:520000,
+    description:"8% project contingency — PM & QS controlled; released via formal instruction" },
   provisionalSums:[
-    {id:"PS001",description:"Specialist Ground Investigation & Soil Borings",phase:"PH1",scheduled:8000000,instructed:7200000,spent:7200000,status:"expended",ref:"RE/PS/001",approvedDate:"2024-04-10",notes:"Final report received; borehole logs filed"},
-    {id:"PS002",description:"Borehole Drilling & Pump House — Water Supply",phase:"PH7",scheduled:6500000,instructed:6500000,spent:0,status:"instructed",ref:"RE/PS/002",approvedDate:"2025-01-20",notes:"Hydrogeological survey complete; drilling tender awarded"},
-    {id:"PS003",description:"External Security Lighting & CCTV Infrastructure",phase:"PH7",scheduled:3800000,instructed:0,spent:0,status:"pending",ref:"",approvedDate:"",notes:"Scope to be defined by NHC security consultant"},
-    {id:"PS004",description:"Landscaping & Hardscaping — Common Areas",phase:"PH7",scheduled:5200000,instructed:0,spent:0,status:"pending",ref:"",approvedDate:"",notes:"LS scope pending final site layout approval"},
-    {id:"PS005",description:"Signage, Way-finding & Boma Yangu Integration Boards",phase:"PH8",scheduled:1200000,instructed:0,spent:0,status:"pending",ref:"",approvedDate:"",notes:"NHC/SDHUD branding standards to be issued"},
+    {id:"PS001",description:"Unforeseen Ground Conditions (Black Cotton Soil Risk)",phase:"PH2",scheduled:800000,instructed:340000,spent:340000,status:"expended",ref:"RE/PS/001",approvedDate:"2025-06-06",notes:"PRV-06 partial release — 4 additional piles required at Ojola clay pocket"},
+    {id:"PS002",description:"Additional Structural Works if Required by SE",phase:"PH3",scheduled:600000,instructed:0,spent:0,status:"pending",ref:"",approvedDate:"",notes:"PRV-07 — released by Structural Engineer instruction only"},
+    {id:"PS003",description:"Utility Connection Fees (KPLC, GWASCO, County Council)",phase:"PH1",scheduled:350000,instructed:350000,spent:180000,status:"instructed",ref:"RE/PS/003",approvedDate:"2025-04-15",notes:"KPLC connection fee paid; GWASCO application in progress"},
+    {id:"PS004",description:"External Services — LV Transformer (KPLC Assessment Pending)",phase:"PH5",scheduled:480000,instructed:480000,spent:0,status:"instructed",ref:"RE/PS/004",approvedDate:"2025-10-14",notes:"PRV-09 released — KPLC confirmed transformer required for 30kVA solar + grid tie"},
+    {id:"PS005",description:"Specialist Artwork & Feature Walls (Client Discretionary)",phase:"PH6",scheduled:500000,instructed:0,spent:0,status:"pending",ref:"",approvedDate:"",notes:"PRV-10 — not yet included in original budget; client decision pending"},
+    {id:"PS006",description:"Wine Cellar Climate-Controlled Fit-Out",phase:"PH6",scheduled:650000,instructed:650000,spent:0,status:"instructed",ref:"RE/PS/006",approvedDate:"2025-05-03",notes:"PRV-11 — client confirmed inclusion; specialist fitout contractor engaged"},
+    {id:"PS007",description:"Home Gym Equipment & Rubber Flooring",phase:"PH6",scheduled:420000,instructed:0,spent:0,status:"pending",ref:"",approvedDate:"",notes:"PRV-12 — client decision pending; room allocated in design"},
+    {id:"PS008",description:"Design Development Reserve — Pre-Construction",phase:"PH1",scheduled:500000,instructed:320000,spent:320000,status:"expended",ref:"RE/PS/008",approvedDate:"2025-04-01",notes:"PRV-16 — used for design evolution and additional survey costs"},
   ],
   primeCost:[
-    {id:"PC001",description:"Imported Ceramic Floor & Wall Tiles (Bathrooms)",phase:"PH6",scheduled:18500000,actual:0,adjusted:18500000,supplier:"Tile Warehouse Ltd — Nairobi",status:"pending",notes:"PC rate: KES 1,850/m² — 10,000m² allowance"},
-    {id:"PC002",description:"Steel Doors, Frames & Hardware — All Units",phase:"PH6",scheduled:14200000,actual:14200000,adjusted:14200000,supplier:"Insteel Doors Ltd (Kisumu)",status:"ordered",notes:"Order placed 2025-01-28; delivery March 2025"},
-    {id:"PC003",description:"Sanitary Ware — WC, Basin, Shower Tray per Unit",phase:"PH6",scheduled:9600000,actual:0,adjusted:9600000,supplier:"Hevea Sanitaryware (Nairobi)",status:"confirmed",notes:"191 units × KES 50,277 allowance"},
-    {id:"PC004",description:"Kitchen Fittings & Countertops per Unit",phase:"PH6",scheduled:11460000,actual:0,adjusted:11460000,supplier:"TBD — tender in progress",status:"pending",notes:"191 units × KES 60,000 PC allowance"},
-    {id:"PC005",description:"Photovoltaic / Solar Common Area Lighting",phase:"PH7",scheduled:4800000,actual:0,adjusted:4800000,supplier:"SunPower EA (Kisumu)",status:"pending",notes:"Provisional allocation — MoE rebate application submitted"},
+    {id:"PC001",description:"Scavolini Italian Kitchen — Full Package incl. Quartz Worktop",phase:"PH6",scheduled:3200000,actual:3380000,adjusted:3380000,supplier:"Scavolini Agent — Nairobi",status:"ordered",notes:"PC-001 — VO-013 raised for KES 180K over-run; order placed 01-Aug-25; 16-week lead"},
+    {id:"PC002",description:"Grohe / Villeroy & Boch 3× En-Suite Bathroom Fixtures",phase:"PH6",scheduled:2800000,actual:0,adjusted:2800000,supplier:"Grohe East Africa Distributor — Nairobi",status:"confirmed",notes:"PC-002 — fixture schedule finalised by architect; order 15-Sep-25"},
+    {id:"PC003",description:"Swarovski / Kichler Bespoke Chandeliers & Lighting Fixtures",phase:"PH6",scheduled:980000,actual:0,adjusted:980000,supplier:"Lighting Design Nairobi",status:"pending",notes:"PC-003 — client selection required by Month 9"},
+    {id:"PC004",description:"Crestron / Lutron / KNX Smart Home Automation System",phase:"PH7",scheduled:1800000,actual:1800000,adjusted:1800000,supplier:"Crestron Authorised Dealer — Nairobi",status:"ordered",notes:"PC-004 — Crestron CP4-R confirmed; order placed 01-Nov-25"},
+    {id:"PC005",description:"Bisazza Glass Mosaic Pool Tiles — Infinity Pool 60m²",phase:"PH9",scheduled:1600000,actual:0,adjusted:1600000,supplier:"Bisazza Italy via Mombasa Port",status:"ordered",notes:"PC-005 — 12-week lead time; order placed 01-Oct-25 to meet pool programme"},
   ],
   variations:[
-    {id:"VO001",description:"Substructure Cost Overrun — Additional Concrete Volume (Block 2 ground beam depths)",phase:"PH2",amount:5500000,status:"submitted",raised:"2025-01-15",ref:"MLPWHUD/SDHUD/AHP/208/VO1",instructedBy:"RE",notes:"VO submitted to SDHUD; QS assessment KES 5.5M; awaiting approval"},
-    {id:"VO002",description:"Additional Reinforcement — Column C3 Remediation (SN001 Honeycombing)",phase:"PH3",amount:380000,status:"approved",raised:"2025-02-15",ref:"RE/VO/002",instructedBy:"RE",notes:"Approved by RE and QS. Contractor proceeding. Works complete."},
-    {id:"VO003",description:"Slab Crack Repair — Block 1 Lvl 1 Corridor (SN002)",phase:"PH3",amount:220000,status:"approved",raised:"2025-02-20",ref:"RE/VO/003",instructedBy:"RE",notes:"Epoxy injection plus surface seal. QS agreed rate KES 220,000."},
-    {id:"VO004",description:"Accelerated Programme Premium — Block 3 Extra Gang",phase:"PH4",amount:2400000,status:"pending",raised:"2025-03-01",ref:"RE/VO/004",instructedBy:"PM",notes:"Block 4 start risk. Contractor requesting acceleration payment."},
-    {id:"VO005",description:"Concrete Pump Standby and Extended Hire — Water Pump Failure",phase:"PH3",amount:85000,status:"approved",raised:"2025-02-10",ref:"RE/VO/005",instructedBy:"CE",notes:"DW001 claim plus standing time 2hrs. Agreed rate."},
+    {id:"VO001",description:"Carrara White Marble extended to corridors & entrance hall — floor area upgrade",phase:"PH6",amount:420000,status:"approved",raised:"2025-05-12",ref:"RE/VO/001",instructedBy:"Client",notes:"Architect approved; QS assessed KES 420K; works included in finishes contractor scope"},
+    {id:"VO002",description:"Addition of home gym room — structural partition, rubber flooring & HVAC extension",phase:"PH3",amount:650000,status:"approved",raised:"2025-05-18",ref:"RE/VO/002",instructedBy:"Client",notes:"Structural partition designed by SE; works completed during superstructure phase"},
+    {id:"VO003",description:"Wine cellar fit-out — climate control, custom racking & cellar pivot door (PC-006 released)",phase:"PH6",amount:680000,status:"approved",raised:"2025-06-03",ref:"RE/VO/003",instructedBy:"Client",notes:"PRV-11 Provisional Sum released; specialist fitout contractor awarded"},
+    {id:"VO004",description:"Roof tile upgrade — standard clay to full standing-seam zinc on entire roof",phase:"PH4",amount:420000,status:"approved",raised:"2025-06-15",ref:"RE/VO/004",instructedBy:"Client",notes:"Structural Engineer confirmed no additional loading; VMZinc ordered 01-Sep-25"},
+    {id:"VO005",description:"NEMA-required additional soakage pit & grease trap for kitchen drainage",phase:"PH5",amount:180000,status:"approved",raised:"2025-07-01",ref:"RE/VO/005",instructedBy:"MEP Eng.",notes:"NEMA compliance instruction — MEP engineer designed; works complete"},
+    {id:"VO006",description:"Unforeseen black cotton soil — 4 additional piles required (PS001 partial release)",phase:"PH2",amount:340000,status:"approved",raised:"2025-07-14",ref:"RE/VO/006",instructedBy:"Struct. Eng.",notes:"Geo-technical recommendation; SE verified; PS001 funds released"},
+    {id:"VO007",description:"Staff quarters second storey — 2 additional rooms above existing staff block",phase:"PH3",amount:280000,status:"approved",raised:"2025-07-28",ref:"RE/VO/007",instructedBy:"Client",notes:"Structural design amended; works incorporated into superstructure programme"},
+    {id:"VO008",description:"Upgrade all internal doors to full-height pivot concealed-hinge solid timber",phase:"PH6",amount:380000,status:"approved",raised:"2025-08-10",ref:"RE/VO/008",instructedBy:"Client",notes:"PC-rate adjusted; bespoke pivot doors ordered from Nairobi joinery"},
+    {id:"VO009",description:"Boundary wall height increase 2.4m to 3.0m + anti-climb topping + razor wire",phase:"PH8",amount:220000,status:"submitted",raised:"2025-08-25",ref:"RE/VO/009",instructedBy:"Client",notes:"Under review by PM; structural check by SE in progress"},
+    {id:"VO010",description:"Add 3× 22kW OCPP EV charging points in 3-car garage (Tesla Wall Connector)",phase:"PH8",amount:360000,status:"submitted",raised:"2025-09-08",ref:"RE/VO/010",instructedBy:"Client",notes:"MEP engineer designing supply circuit; pending PM & client approval"},
+    {id:"VO011",description:"Master bedroom — bespoke hand-painted Italian fresco feature ceiling",phase:"PH6",amount:780000,status:"submitted",raised:"2025-09-22",ref:"RE/VO/011",instructedBy:"Client",notes:"Under review — specialist artist engaged for quotation; ID approval pending"},
+    {id:"VO012",description:"Omission: Remove 1 standard wardrobe replaced by bespoke walk-in dressing room",phase:"PH6",amount:-180000,status:"approved",raised:"2025-10-06",ref:"RE/VO/012",instructedBy:"Client",notes:"Omission credit KES 180K; walk-in dressing room included in bespoke joinery scope"},
+    {id:"VO013",description:"PC Sum adjustment — Scavolini kitchen final selection over PC allowance",phase:"PH6",amount:180000,status:"approved",raised:"2025-10-20",ref:"RE/VO/013",instructedBy:"QS",notes:"PC-001 final selection KES 3.38M vs KES 3.2M allowance; QS agreed KES 180K uplift"},
+    {id:"VO014",description:"KPLC LV transformer required — Provisional Sum released (PS004)",phase:"PH5",amount:480000,status:"approved",raised:"2025-11-03",ref:"RE/VO/014",instructedBy:"MEP Eng.",notes:"PS004 instructed; KPLC confirmed transformer requirement for grid-tie solar"},
+    {id:"VO015",description:"Rooftop terrace / sky lounge — RC slab, glass balustrade, outdoor furniture",phase:"PH4",amount:1200000,status:"submitted",raised:"2025-11-17",ref:"RE/VO/015",instructedBy:"Client",notes:"SE structural loading assessment in progress; RFI-016 open; pending approval"},
   ],
   dayworks:[
-    {id:"DW001",date:"2025-02-10",description:"Emergency standby pump deployment and extended hire — concrete pour delay",labour:28000,plant:45000,materials:8000,status:"approved",authorisedBy:"CE",ref:"DW/001"},
-    {id:"DW002",date:"2025-02-12",description:"Temporary propping and shoring — Block 1 Lvl 1 slab crack investigation",labour:32000,plant:12000,materials:5500,status:"approved",authorisedBy:"RE",ref:"DW/002"},
-    {id:"DW003",date:"2025-02-18",description:"Column C3 (SN001) honeycombing chipping, cleaning and preparation for repair",labour:18000,plant:4000,materials:12000,status:"approved",authorisedBy:"QA",ref:"DW/003"},
-    {id:"DW004",date:"2025-03-01",description:"Additional formwork striking and column inspection — Block 2 Lvl 1 (SN004 remediation)",labour:14000,plant:0,materials:2000,status:"submitted",authorisedBy:"",ref:"DW/004"},
+    {id:"DW001",date:"2025-07-14",description:"Emergency site investigation — black cotton soil pocket encountered during pile boring; additional boring & soil sampling",labour:28000,plant:45000,materials:8000,status:"approved",authorisedBy:"SE",ref:"DW/001"},
+    {id:"DW002",date:"2025-09-05",description:"Additional pile boring and casing — 4 extra piles in black cotton zone, extended casing and concrete",labour:62000,plant:88000,materials:45000,status:"approved",authorisedBy:"SE",ref:"DW/002"},
+    {id:"DW003",date:"2025-10-14",description:"KPLC transformer pad construction — concrete plinth, earthing, protective fencing",labour:18000,plant:12000,materials:32000,status:"approved",authorisedBy:"MEP",ref:"DW/003"},
+    {id:"DW004",date:"2025-11-05",description:"Roof truss apex weld NDT re-test — 2 welds failed initial UT; grind, re-weld and re-test",labour:24000,plant:8000,materials:6000,status:"approved",authorisedBy:"SE",ref:"DW/004"},
+    {id:"DW005",date:"2025-12-02",description:"Additional MEP coordination works — condensate drain reroute in Master Bedroom ceiling void (RFI-006)",labour:14000,plant:0,materials:9500,status:"approved",authorisedBy:"MEP",ref:"DW/005"},
+    {id:"DW006",date:"2026-01-10",description:"Boundary wall extra height and anti-climb works (VO-009 preliminary mobilisation whilst VO under review)",labour:32000,plant:15000,materials:28000,status:"submitted",authorisedBy:"",ref:"DW/006"},
   ],
 };
 
@@ -1208,84 +1253,126 @@ const blankProject = (name, location) => ({
   provisions:{contingency:{allocated:0,committed:0,expended:0,description:""},provisionalSums:[],primeCost:[],variations:[],dayworks:[]},
 });
 
-// ── DEFAULT DATA (Rongo AHP) ──────────────────────────────────────────────────
+// ── DEFAULT DATA (Kisumu Ojola Ultra-Luxury 3BR) ──────────────────────────────
 const RONGO_DATA = {
-  site:{ name:"Rongo New Town AHP", location:"Rongo Constituency, Migori County",
-    units:191, blocks:4, land:"3.2 acres", contractor:"SDHUD / NHC",
-    client:"State Dept. of Housing & Urban Development", PMC:"PMC Supervision Unit — Migori",
-    startDate:"2024-03-01", targetCompletion:"2026-06-30", contractValue:954000000 },
+  site:{
+    name:"Ojola Ultra-Luxury Residence",
+    location:"Kisumu Ojola, Kisumu County, Kenya",
+    units:1, blocks:1, land:"0.25 Acres",
+    contractor:"Grade 1 NCA Main Contractor (TBA — Procurement Ph 1)",
+    client:"Private Client — Kisumu Ojola",
+    PMC:"Client Project Manager + AAK-Registered Architect",
+    startDate:"2025-04-01", targetCompletion:"2027-01-31",
+    contractValue:58500000
+  },
   phases:[
-    {id:"PH1",name:"Site Preparation & Earthworks",      status:"completed",  progress:100,startDate:"2024-03-01",endDate:"2024-06-15",budget:52000000, spent:51200000, lead:"CE", description:"Site clearing, topsoil stripping, bulk earthworks, access road, hoarding"},
-    {id:"PH2",name:"Substructure & Foundation Works",    status:"completed",  progress:100,startDate:"2024-05-01",endDate:"2024-09-30",budget:143000000,spent:148500000,lead:"SE", description:"Strip footings, ground beams, ground-floor slab — 4 blocks"},
-    {id:"PH3",name:"Superstructure — Blocks 1 & 2",      status:"in-progress",progress:68, startDate:"2024-08-15",endDate:"2025-06-30",budget:220000000,spent:149600000,lead:"PM", description:"Columns, ring beams, floor slabs, staircases — 96 units across 2 blocks"},
-    {id:"PH4",name:"Superstructure — Blocks 3 & 4",      status:"in-progress",progress:28, startDate:"2025-01-01",endDate:"2025-10-31",budget:198000000,spent:55440000, lead:"PM", description:"Columns, ring beams, floor slabs, staircases — 95 units across 2 blocks"},
-    {id:"PH5",name:"MEP Rough-in, Roofing & Envelope",   status:"in-progress",progress:18, startDate:"2025-04-01",endDate:"2026-01-31",budget:124000000,spent:22320000, lead:"MEP",description:"Plumbing rough-in, electrical conduit, roof slab waterproofing, window frames"},
-    {id:"PH6",name:"Finishes & Internal Fit-out",         status:"at-risk",    progress:5,  startDate:"2025-07-01",endDate:"2026-04-30",budget:145000000,spent:7250000,  lead:"FO", description:"Plastering, floor tiling, painting, doors, kitchenettes, sanitary ware"},
-    {id:"PH7",name:"External Works & Amenities",          status:"not-started",progress:0,  startDate:"2025-12-01",endDate:"2026-05-31",budget:54000000, spent:0,         lead:"LS", description:"Perimeter wall, parking, landscaping, borehole, external lighting, signage"},
-    {id:"PH8",name:"Testing, Commissioning & Handover",  status:"not-started",progress:0,  startDate:"2026-05-01",endDate:"2026-06-30",budget:18000000, spent:0,         lead:"QA", description:"Snagging, services commissioning, SDHUD/NHC inspection, Boma Yangu allocation"},
+    {id:"PH1",name:"Pre-Construction, Design & Approvals",     status:"completed",  progress:100,startDate:"2025-04-01",endDate:"2025-05-31",budget:3200000, spent:3150000, lead:"PM",  description:"Topographic & geo survey, architectural design, structural & MEP engineering, NCA/County/NEMA approvals, BOQ, contractor procurement"},
+    {id:"PH2",name:"Earthworks, Foundation & Substructure",    status:"completed",  progress:100,startDate:"2025-05-01",endDate:"2025-09-20",budget:6800000, spent:7140000, lead:"SE",  description:"Site clearance, bulk excavation, anti-termite treatment, pile foundation, basement & underground tank, DPC, ground-floor BRC slab — VO-006 additional piles"},
+    {id:"PH3",name:"Superstructure & Walling",                 status:"in-progress",progress:72, startDate:"2025-07-01",endDate:"2025-11-30",budget:8500000, spent:6120000, lead:"SE",  description:"RC columns, shear walls, suspended slabs, masonry walling internal & external, lintels, Italian stone cladding, staircase"},
+    {id:"PH4",name:"Roof Structure & Waterproofing",           status:"in-progress",progress:45, startDate:"2025-09-15",endDate:"2025-11-30",budget:4200000, spent:1890000, lead:"SE",  description:"Structural steel trusses (Grade S275), zinc standing-seam roof (VO-004), Sika membrane, copper gutters, Velux skylights"},
+    {id:"PH5",name:"Mechanical, Electrical & Plumbing (MEP)",  status:"in-progress",progress:30, startDate:"2025-09-01",endDate:"2026-04-30",budget:7800000, spent:2340000, lead:"MEP", description:"30kW solar + 40kWh battery, 22kVA generator, VRF HVAC (Daikin), borehole & RO water, plumbing first & second fix, underfloor heating, LV transformer"},
+    {id:"PH6",name:"Ultra-Premium Interior Finishes",          status:"in-progress",progress:15, startDate:"2025-10-01",endDate:"2026-08-31",budget:14500000,spent:2175000, lead:"ID",  description:"Carrara marble flooring, Porcelanosa tiles, Scavolini kitchen, Grohe/V&B bathrooms, bespoke joinery, WICONA windows, feature staircase, fresco ceiling"},
+    {id:"PH7",name:"Smart Home, AV & Security Systems",        status:"not-started",progress:0,  startDate:"2026-04-01",endDate:"2026-07-31",budget:4500000, spent:0,        lead:"SS",  description:"Crestron smart home, home cinema, Bang & Olufsen audio, Hikvision CCTV, biometric access, electric gate, fibre cabling"},
+    {id:"PH8",name:"Exterior Finishes & Landscaping",          status:"in-progress",progress:20, startDate:"2025-07-01",endDate:"2026-08-31",budget:5200000, spent:1040000, lead:"LS",  description:"Boundary wall (VO-009 height upgrade), granite driveway, tropical landscape, outdoor kitchen & teak deck, 3-car garage EV charging, staff quarters"},
+    {id:"PH9",name:"Pool, Spa & Water Features",               status:"in-progress",progress:35, startDate:"2025-07-01",endDate:"2026-07-31",budget:2800000, spent:980000,  lead:"PC",  description:"Infinity pool 12×5m with Bisazza glass mosaic, Hayward filtration, 6-person outdoor Jacuzzi, slate water feature, Travertine surrounds"},
+    {id:"PH10",name:"Commissioning, Testing & Handover",       status:"not-started",progress:0,  startDate:"2026-11-01",endDate:"2027-01-31",budget:1000000, spent:0,        lead:"PM",  description:"MEP & smart systems commissioning, final snagging, as-built drawings, occupation certificate, client handover — 12-month DLP commences"},
   ],
   wps:[
-    {id:"WP001",phase:"PH2",trade:"Structural",name:"Strip Footings — All Blocks",status:"done",priority:"critical",assignee:"SE",progress:100,qty:"4 blocks / 191 units",unit:"KES 68M",deps:""},
-    {id:"WP002",phase:"PH2",trade:"Structural",name:"Ground Beams & Ground Slab",status:"done",priority:"critical",assignee:"SE",progress:100,qty:"4 blocks / 760m² GF slab",unit:"KES 75M",deps:"WP001"},
-    {id:"WP003",phase:"PH3",trade:"Structural",name:"Block 1 — Superstructure Lvl 1–5",status:"done",priority:"critical",assignee:"SE",progress:100,qty:"5 floors / 50 units",unit:"KES 58M",deps:"WP002"},
-    {id:"WP004",phase:"PH3",trade:"Structural",name:"Block 2 — Superstructure Lvl 1–5",status:"in-progress",priority:"critical",assignee:"PM",progress:72,qty:"5 floors / 46 units",unit:"KES 55M",deps:"WP002"},
-    {id:"WP005",phase:"PH4",trade:"Structural",name:"Block 3 — Superstructure Lvl 1–5",status:"in-progress",priority:"critical",assignee:"SE",progress:32,qty:"5 floors / 48 units",unit:"KES 56M",deps:"WP002"},
-    {id:"WP006",phase:"PH4",trade:"Structural",name:"Block 4 — Superstructure Lvl 1–4",status:"not-started",priority:"critical",assignee:"PM",progress:0,qty:"4 floors / 47 units",unit:"KES 52M",deps:"WP005"},
-    {id:"WP007",phase:"PH5",trade:"MEP",name:"Plumbing Rough-in — Blocks 1 & 2",status:"in-progress",priority:"high",assignee:"MEP",progress:35,qty:"96 units / 4 risers",unit:"KES 22M",deps:"WP003"},
-    {id:"WP008",phase:"PH5",trade:"MEP",name:"Electrical Conduit — Blocks 1 & 2",status:"in-progress",priority:"high",assignee:"MEP",progress:28,qty:"96 units / DB boards",unit:"KES 18M",deps:"WP003"},
-    {id:"WP009",phase:"PH5",trade:"Civil",name:"Roof Slab & Waterproofing — Blk 1",status:"in-progress",priority:"high",assignee:"CE",progress:55,qty:"Block 1 / 520m² roof",unit:"KES 14M",deps:"WP003"},
-    {id:"WP010",phase:"PH6",trade:"Finishes",name:"Plastering — Block 1",status:"in-progress",priority:"medium",assignee:"FO",progress:30,qty:"50 units / all walls",unit:"KES 18M",deps:"WP003"},
-    {id:"WP011",phase:"PH6",trade:"Finishes",name:"Floor Tiling & Sanitary Ware — Blk 1",status:"blocked",priority:"high",assignee:"FO",progress:0,qty:"50 units / bathrooms + kitchen",unit:"KES 22M",deps:"WP010,WP007"},
-    {id:"WP012",phase:"PH7",trade:"External",name:"Perimeter Wall & Gate",status:"not-started",priority:"medium",assignee:"CE",progress:0,qty:"240m perimeter / 1 gate",unit:"KES 8M",deps:"WP002"},
-    {id:"WP013",phase:"PH7",trade:"External",name:"Borehole Drilling & Pump House",status:"not-started",priority:"high",assignee:"MEP",progress:0,qty:"1 borehole / 5,000L/hr target",unit:"KES 6.5M",deps:""},
-    {id:"WP014",phase:"PH7",trade:"External",name:"Parking & External Paving",status:"not-started",priority:"medium",assignee:"CE",progress:0,qty:"40 bays / 1,800m² paving",unit:"KES 12M",deps:"WP012"},
+    {id:"WP001",phase:"PH1",trade:"Professional",name:"Topographic & Geotechnical Survey",status:"done",priority:"critical",assignee:"SE",progress:100,qty:"0.25 Acres / 60m borehole log",unit:"KES 280K",deps:""},
+    {id:"WP002",phase:"PH1",trade:"Professional",name:"Architectural & Structural Design Package",status:"done",priority:"critical",assignee:"AR",progress:100,qty:"Full RIBA Stage 2-4 drawings",unit:"KES 1.07M",deps:"WP001"},
+    {id:"WP003",phase:"PH1",trade:"Professional",name:"NCA, County & NEMA Approvals",status:"done",priority:"critical",assignee:"PM",progress:100,qty:"All statutory consents",unit:"KES 350K",deps:"WP002"},
+    {id:"WP004",phase:"PH2",trade:"Structural",name:"Pile Foundation — 4 Extra Piles (VO-006)",status:"done",priority:"critical",assignee:"SE",progress:100,qty:"Ojola clay — 60m deep piles",unit:"KES 3.14M",deps:"WP003"},
+    {id:"WP005",phase:"PH2",trade:"Structural",name:"Basement, Underground Tank & Ground Slab",status:"done",priority:"critical",assignee:"SE",progress:100,qty:"50,000L tank / 650m² slab",unit:"KES 3.0M",deps:"WP004"},
+    {id:"WP006",phase:"PH3",trade:"Structural",name:"RC Columns & Shear Walls — G+1 Structure",status:"in-progress",priority:"critical",assignee:"SE",progress:72,qty:"C35 concrete / all grids",unit:"KES 3.8M",deps:"WP005"},
+    {id:"WP007",phase:"PH3",trade:"Structural",name:"Suspended Slabs (1st & 2nd Floor)",status:"in-progress",priority:"critical",assignee:"SE",progress:60,qty:"420m² + 380m² suspended BRC",unit:"KES 3.4M",deps:"WP006"},
+    {id:"WP008",phase:"PH3",trade:"Masonry",name:"External Stone Cladding — Italian Limestone",status:"in-progress",priority:"high",assignee:"AR",progress:30,qty:"220m² Margraf limestone",unit:"KES 760K",deps:"WP006"},
+    {id:"WP009",phase:"PH4",trade:"Structural",name:"Steel Roof Trusses & Standing-Seam Zinc Roof",status:"in-progress",priority:"critical",assignee:"SE",progress:45,qty:"Grade S275 / VMZinc 500m²",unit:"KES 2.38M",deps:"WP007"},
+    {id:"WP010",phase:"PH4",trade:"Waterproofing",name:"Sika Roof Membrane & Velux Skylights",status:"in-progress",priority:"high",assignee:"SE",progress:20,qty:"520m² membrane / 6 skylights",unit:"KES 1.82M",deps:"WP009"},
+    {id:"WP011",phase:"PH5",trade:"MEP",name:"Solar PV + Battery + Generator Installation",status:"in-progress",priority:"critical",assignee:"MEP",progress:35,qty:"30kW solar / 40kWh Victron / 22kVA Perkins",unit:"KES 3.96M",deps:"WP006"},
+    {id:"WP012",phase:"PH5",trade:"MEP",name:"Borehole + RO Water Treatment System",status:"done",priority:"high",assignee:"MEP",progress:100,qty:"60m borehole / VFD pump / RO plant",unit:"KES 1.06M",deps:"WP004"},
+    {id:"WP013",phase:"PH5",trade:"MEP",name:"HVAC — Daikin VRF Multi-Split + Underfloor Heat",status:"not-started",priority:"high",assignee:"MEP",progress:0,qty:"28kW cooling / 120m² UFH",unit:"KES 1.68M",deps:"WP007"},
+    {id:"WP014",phase:"PH5",trade:"MEP",name:"Plumbing First & Second Fix — Grohe Fixtures",status:"in-progress",priority:"high",assignee:"MEP",progress:28,qty:"HDPE+copper mains / 8 wet rooms",unit:"KES 1.72M",deps:"WP006"},
+    {id:"WP015",phase:"PH6",trade:"Finishes",name:"Carrara White Marble & Porcelanosa Tile Floors",status:"not-started",priority:"critical",assignee:"ID",progress:0,qty:"200m² Carrara / 240m² 800×800",unit:"KES 3.0M",deps:"WP007"},
+    {id:"WP016",phase:"PH6",trade:"Finishes",name:"Scavolini Kitchen + Bespoke Joinery Package",status:"not-started",priority:"critical",assignee:"ID",progress:0,qty:"Full kitchen + wardrobes + TV units",unit:"KES 5.6M",deps:"WP015"},
+    {id:"WP017",phase:"PH6",trade:"Finishes",name:"3× En-Suite Bathrooms — Grohe / V&B",status:"not-started",priority:"critical",assignee:"ID",progress:0,qty:"Grohe Rainshower / freestanding baths",unit:"KES 2.8M",deps:"WP014"},
+    {id:"WP018",phase:"PH6",trade:"Finishes",name:"WICONA Aluminium Windows & Feature Staircase",status:"in-progress",priority:"high",assignee:"AR",progress:25,qty:"190m² DG windows / steel-glass stair",unit:"KES 2.18M",deps:"WP007"},
+    {id:"WP019",phase:"PH7",trade:"Smart",name:"Crestron Smart Home + B&O Audio + Cinema",status:"not-started",priority:"high",assignee:"SS",progress:0,qty:"Full Crestron RA2 / 4K laser cinema",unit:"KES 3.4M",deps:"WP011"},
+    {id:"WP020",phase:"PH7",trade:"Security",name:"CCTV + Biometric Access + Electric Gate",status:"not-started",priority:"high",assignee:"SS",progress:0,qty:"32× 4K Hikvision / BFT gate",unit:"KES 1.1M",deps:"WP019"},
+    {id:"WP021",phase:"PH8",trade:"External",name:"Granite Sett Driveway + Boundary Wall",status:"in-progress",priority:"medium",assignee:"LS",progress:20,qty:"280m² granite / 85m perimeter wall",unit:"KES 1.4M",deps:"WP005"},
+    {id:"WP022",phase:"PH8",trade:"Landscaping",name:"Tropical Garden, Irrigation & Outdoor Kitchen",status:"not-started",priority:"medium",assignee:"LS",progress:0,qty:"0.25 acres landscaping / teak deck",unit:"KES 1.36M",deps:"WP021"},
+    {id:"WP023",phase:"PH9",trade:"Pool",name:"Infinity Pool Shell — Bisazza Glass Mosaic",status:"in-progress",priority:"high",assignee:"PC",progress:35,qty:"12×5m / 60m² Bisazza tiles",unit:"KES 2.08M",deps:"WP005"},
+    {id:"WP024",phase:"PH9",trade:"Pool",name:"Pool Filtration + Jacuzzi + Travertine Surround",status:"not-started",priority:"medium",assignee:"PC",progress:0,qty:"Hayward Salt / 6-person spa / 125m²",unit:"KES 720K",deps:"WP023"},
+    {id:"WP025",phase:"PH10",trade:"Commissioning",name:"MEP & Smart Systems Final Commissioning",status:"not-started",priority:"critical",assignee:"PM",progress:0,qty:"All systems — Practical Completion",unit:"KES 400K",deps:"WP019,WP014"},
+    {id:"WP026",phase:"PH10",trade:"Commissioning",name:"Snagging, OC Certificate & Client Handover",status:"not-started",priority:"critical",assignee:"PM",progress:0,qty:"Signed Practical Completion Certificate",unit:"KES 300K",deps:"WP025"},
   ],
   risks:[
-    {id:"R001",phase:"PH2",title:"Substructure cost overrun (KES 5.5M)",severity:"high",probability:90,impact:"Budget — variation order required from SDHUD",mitigation:"VO submitted ref. MLPWHUD/SDHUD/AHP/208; approval awaited",owner:"QS",status:"mitigating"},
-    {id:"R002",phase:"PH3",title:"Cement & aggregate supply delays",severity:"high",probability:60,impact:"Timeline — 2–4 week frame delay risk",mitigation:"Pre-order 3-month stock; identify Kisii & Kisumu suppliers",owner:"CE",status:"mitigating"},
-    {id:"R003",phase:"PH4",title:"Block 4 start dependent on Block 3 slab",severity:"critical",probability:75,impact:"Timeline — PH4 cannot start until Block 3 Lvl 3 done",mitigation:"Accelerate Block 3 with additional gang; review programme",owner:"PM",status:"open"},
-    {id:"R004",phase:"PH6",title:"Skilled finishes artisan shortage",severity:"medium",probability:65,impact:"Finishes schedule slippage — Rongo town labour thin",mitigation:"Recruit tilers from Migori & Kisii towns",owner:"FO",status:"open"},
-    {id:"R005",phase:"PH7",title:"Borehole yield uncertain (sandy strata)",severity:"high",probability:50,impact:"Water supply — may need MWASCO connection at extra cost",mitigation:"Hydrogeological survey underway; MWASCO pre-application sent",owner:"MEP",status:"mitigating"},
-    {id:"R006",phase:"PH8",title:"Boma Yangu allocation list delays",severity:"medium",probability:55,impact:"Handover delayed — units complete but unoccupied",mitigation:"Liaise with NHC Nairobi; constituency list compiled",owner:"PM",status:"open"},
+    {id:"R001",phase:"PH2",title:"Ojola black cotton soil — pile over-depth & extra cost",severity:"critical",probability:90,impact:"Budget overrun KES 340K — VO-006 issued and approved. Monitor remaining pile zones.",mitigation:"4 extra piles completed; geo-survey extended; SE monitoring all remaining pile positions",owner:"SE",status:"mitigating"},
+    {id:"R002",phase:"PH3",title:"Import material delays — Italian marble, stone cladding (12-week lead)",severity:"high",probability:65,impact:"Interior finishes programme delayed 4–6 weeks if Carrara marble misses Nov shipment",mitigation:"Marble ordered Aug-25 via Mombasa; 15% buffer quantity added; tracking with Margraf Italy",owner:"QS",status:"mitigating"},
+    {id:"R003",phase:"PH5",title:"Currency fluctuation KES/EUR — imported MEP & finishes exposure",severity:"high",probability:70,impact:"Budget uplift risk KES 2–4M on EUR-denominated items if KES weakens further",mitigation:"Forward contracts on Scavolini kitchen & WICONA windows; remaining items to be hedged",owner:"PM",status:"open"},
+    {id:"R004",phase:"PH6",title:"Design changes & scope creep — client-initiated VOs accumulating",severity:"high",probability:75,impact:"Programme delay 2–3 months; cost overrun risk KES 3M on current VO pipeline",mitigation:"Formal VO freeze requested; all new VOs require written client sign-off + QS cost impact",owner:"PM",status:"mitigating"},
+    {id:"R005",phase:"PH4",title:"Roof truss weld failures — NDT re-test required on 2 apexes",severity:"high",probability:100,impact:"2-week programme delay; DW-004 cost KES 38K — remediation in progress",mitigation:"SE instructed grind, re-weld and 3rd-party UT re-test; QA hold point active",owner:"SE",status:"mitigating"},
+    {id:"R006",phase:"PH6",title:"Scavolini kitchen delivery delay — 16-week factory lead from Italy",severity:"high",probability:55,impact:"Interior programme cannot complete without kitchen; delay risk 4–8 weeks",mitigation:"Order placed 01-Aug-25; factory visit scheduled; air freight contingency pre-priced",owner:"ID",status:"mitigating"},
+    {id:"R007",phase:"PH3",title:"Theft of high-value materials on site — Bisazza tiles, copper, aluminium",severity:"critical",probability:45,impact:"Financial loss KES 500K–2M; programme disruption; insurance claim process",mitigation:"24hr armed security deployed; phased delivery of premium items; CCTV live monitoring",owner:"PM",status:"open"},
+    {id:"R008",phase:"PH5",title:"Rooftop terrace (VO-015) structural slab capacity — SE assessment pending",severity:"high",probability:60,impact:"VO-015 KES 1.2M may require slab strengthening (additional KES 400K+)",mitigation:"SE loading assessment in progress per RFI-016; decision within 2 weeks",owner:"SE",status:"open"},
+    {id:"R009",phase:"PH8",title:"NEMA / County compliance — waste water & drainage approval",severity:"medium",probability:40,impact:"Occupation Certificate withheld; project cannot hand over to client",mitigation:"NEMA grease trap installed (VO-005); drainage as-built submitted; inspection scheduled",owner:"PM",status:"mitigating"},
+    {id:"R010",phase:"PH10",title:"Contractor insolvency before practical completion",severity:"critical",probability:20,impact:"Project stalls; all retention and performance bond called; re-procurement needed",mitigation:"10% performance bond held; monthly milestone payments only; financial health monitored",owner:"PM",status:"open"},
   ],
   snags:[
-    {id:"SN001",block:"Block 1",item:"Honeycombing on column C3 — Lvl 2",severity:"major",status:"open",raised:"2025-02-12"},
-    {id:"SN002",block:"Block 1",item:"Slab crack >0.3mm width — Lvl 1 corridor",severity:"major",status:"open",raised:"2025-02-18"},
-    {id:"SN003",block:"Block 2",item:"Rebar cover <25mm on external beam",severity:"critical",status:"remediated",raised:"2025-01-30"},
-    {id:"SN004",block:"Block 2",item:"Formwork not stripped at 28 days — Lvl 1",severity:"minor",status:"open",raised:"2025-02-20"},
+    {id:"SN001",block:"Roof Structure",item:"2× apex weld failures — NDT UT test below AWS D1.1 acceptance (RFI-005 / DW-004)",severity:"critical",status:"open",raised:"2025-11-05"},
+    {id:"SN002",block:"Phase 2 Foundation",item:"Minor honeycombing on pile cap PC-07 — chipped, cleaned; epoxy repair applied",severity:"major",status:"remediated",raised:"2025-08-20"},
+    {id:"SN003",block:"External Cladding",item:"Italian limestone cladding — adhesion pull-off test 0.38 N/mm² on 2 panels (below 0.5 threshold)",severity:"major",status:"open",raised:"2025-10-15"},
+    {id:"SN004",block:"Phase 2 Foundation",item:"DPC membrane lap joint — 50mm lap insufficient in 3 locations; Sika spec requires 75mm min",severity:"major",status:"remediated",raised:"2025-07-22"},
+    {id:"SN005",block:"MEP",item:"Borehole static water level at 52m — exceeds original pump set depth of 45m",severity:"major",status:"remediated",raised:"2025-09-12"},
+    {id:"SN006",block:"Superstructure",item:"Column rebar cover — 3 columns measured at 22mm; spec requires 25mm min cover",severity:"major",status:"open",raised:"2025-10-03"},
+    {id:"SN007",block:"Roof",item:"KPLC transformer pad earthing resistance 12 ohms — spec requires < 5 ohms",severity:"major",status:"open",raised:"2025-11-08"},
+    {id:"SN008",block:"Pool Structure",item:"Pool shell hydraulic pressure test — water level drop 6mm in 72hrs (max allowable 3mm)",severity:"critical",status:"open",raised:"2025-11-20"},
   ],
   team:[
-    {id:"PM",name:"Peter O.",role:"Project Manager",org:"NHC",load:88},
-    {id:"SE",name:"Susan A.",role:"Structural Engineer",org:"Consultant",load:82},
-    {id:"CE",name:"Collins O.",role:"Civil Engineer",org:"PMC",load:74},
-    {id:"MEP",name:"Moses N.",role:"M&E Engineer",org:"Sub-consultant",load:70},
-    {id:"FO",name:"Faith O.",role:"Finishes Foreman",org:"Contractor",load:91},
-    {id:"QA",name:"Quinter A.",role:"QA/QC Inspector",org:"PMC",load:68},
-    {id:"QS",name:"Willis O.",role:"Quantity Surveyor",org:"NHC",load:78},
-    {id:"LS",name:"Lorna S.",role:"Landscape / External",org:"Sub-consultant",load:35},
+    {id:"PM",name:"Client PM",role:"Client Project Manager",org:"PM Consultancy",load:88},
+    {id:"AR",name:"Arch. Lead",role:"Lead Architect (AAK)",org:"Architecture Practice",load:75},
+    {id:"SE",name:"Struct. Eng.",role:"Structural Engineer (EBK)",org:"SE Consultants",load:82},
+    {id:"MEP",name:"MEP Eng.",role:"MEP Engineer (EBK)",org:"MEP Consultants",load:70},
+    {id:"QS",name:"Qty. Surv.",role:"Quantity Surveyor (IQSK)",org:"QS Practice",load:78},
+    {id:"ID",name:"Int. Des.",role:"Interior Designer",org:"Design Studio",load:68},
+    {id:"SS",name:"Smart Spec.",role:"Smart Home Specialist",org:"Crestron Partner",load:45},
+    {id:"LS",name:"Landscape",role:"Landscape Architect",org:"LA Practice",load:42},
+    {id:"PC",name:"Pool Cont.",role:"Pool Specialist Contractor",org:"Pool & Spa Co.",load:65},
+    {id:"QA",name:"QA/QC",role:"QA/QC Inspector",org:"Independent",load:72},
+    {id:"CO",name:"Main Cont.",role:"Main Contractor Agent",org:"NCA Grade 1",load:95},
   ],
   diaries:[
-    {id:"D001",date:"2025-02-10",weather:"sunny",gangsPresent:14,temperature:"28°C",
-     works:[{area:"Block 2 — Lvl 3",description:"Column shuttering and reinforcement placement completed for Grid A–D. Concrete pour for 8 columns.",manHours:84,materials:"3.2t Y16 rebar, 24 bags OPC, 1.8m³ aggregate"},
-            {area:"Block 1 — Lvl 5",description:"Ring beam reinforcement inspection and RE sign-off obtained.",manHours:24,materials:""}],
-     issues:"Water pump failure at 14:30 — 2hr delay on concrete pour. Standby pump deployed.",visitors:"RE (Susan A.) — signed off ring beam drawings",author:"PM"},
-    {id:"D002",date:"2025-02-11",weather:"overcast",gangsPresent:12,temperature:"24°C",
-     works:[{area:"Block 2 — Lvl 3",description:"Concrete pour for 8 columns completed. 36 cube samples taken. Curing compound applied.",manHours:96,materials:"14m³ concrete (1:2:4), 36 cube moulds"}],
-     issues:"Concrete delivery arrived 45 min late — adjust schedule tomorrow.",visitors:"",author:"CE"},
-    {id:"D003",date:"2025-02-12",weather:"sunny",gangsPresent:16,temperature:"30°C",
-     works:[{area:"Block 2 — Lvl 3",description:"Slab formwork erection commenced. Props and whalers installed across 240m².",manHours:128,materials:"Props × 80, timber whalers, plywood shuttering"},
-            {area:"Block 3 — Lvl 1",description:"Column starters cast. Grid A1–C4 complete.",manHours:60,materials:"2.1t Y16, 0.8t Y10, 18 bags OPC"}],
-     issues:"Honeycombing found on column C3 — logged as SN001. Remediation plan raised.",visitors:"QA Inspector (Quinter A.)",author:"PM"},
+    {id:"D001",date:"2025-11-05",weather:"sunny",gangsPresent:22,temperature:"29°C",
+     works:[
+       {area:"Roof Structure",description:"NDT ultrasonic test on steel roof truss apex welds — 2 of 14 welds failed AWS D1.1 acceptance criteria. SE instructed immediate remediation. Logged SN001.",manHours:48,materials:"UT equipment, SE technician"},
+       {area:"Pool Shell",description:"Infinity pool concrete shell ongoing — 3rd pour completed. Bisazza tile adhesive base coat applied to south face.",manHours:72,materials:"C35 concrete 4.2m³, Mapei adhesive base 80kg"}
+     ],
+     issues:"Apex weld failures on trusses — hold point active. SE onsite from 10:00. Works stopped on roof until re-weld and re-test complete.",visitors:"SE (Structural Eng.) — NDT inspection. QA Inspector (QA/QC) — hold point sign-off pending",author:"PM"},
+    {id:"D002",date:"2025-11-08",weather:"overcast",gangsPresent:20,temperature:"26°C",
+     works:[
+       {area:"Superstructure — Upper Floor",description:"Upper floor column reinforcement inspection — SE checks cover on all columns. 3 columns flagged SN006 cover <25mm.",manHours:36,materials:"Cover meter readings, rebar adjustment clips"},
+       {area:"MEP — KPLC Transformer Pad",description:"Transformer pad earthing resistance test — 12 ohms recorded against spec of <5 ohms. Additional earth rods required. Logged SN007.",manHours:24,materials:"Earth resistance tester, earth rods"}
+     ],
+     issues:"SN006 rebar cover and SN007 earthing non-conformance raised. MEP engineer instructed to add 3 additional earth rods and retest.",visitors:"KPLC Inspector — transformer pad pre-connection inspection",author:"CO"},
+    {id:"D003",date:"2025-11-20",weather:"partly-cloudy",gangsPresent:18,temperature:"28°C",
+     works:[
+       {area:"Pool — Hydraulic Pressure Test",description:"72-hour pool water retention test commenced 18:00. Pool filled to overflow level. Monitoring water level drop.",manHours:8,materials:"Water meter, tape measure, datum marks"},
+       {area:"Cladding — Italian Limestone",description:"Pull-off adhesion re-test on 2 failing panels (SN003). 1 panel re-bonded with Mapei Granirapid; re-test scheduled 10 days.",manHours:32,materials:"Mapei Granirapid 25kg, pull-off test equipment"}
+     ],
+     issues:"Pool pressure test showing 6mm drop at 72hr mark (SN008 raised — max allowable 3mm). Pool specialist investigating crystalline waterproofing application.",visitors:"Pool Specialist Contractor — hydraulic test witness",author:"QA"},
   ],
   materials:[
-    {id:"MT001",name:"OPC 42.5 Cement",unit:"Bags (50kg)",category:"Concrete",totalOrdered:8000,delivered:5400,onSite:1240,consumed:4160,plannedConsumption:7600,weeklyBurn:280,supplier:"Bamburi / ARM Cement",lastDelivery:"2025-02-08",nextDelivery:"2025-02-22",notes:"Monitor supply chain — cement price increased 8% Jan 2025"},
-    {id:"MT002",name:"High-Yield Rebar Y16",unit:"Tonnes",category:"Steel",totalOrdered:180,delivered:98,onSite:34,consumed:64,plannedConsumption:165,weeklyBurn:4.2,supplier:"Steel Africa (Nairobi)",lastDelivery:"2025-02-05",nextDelivery:"2025-02-26",notes:"Critical item — long lead time from Nairobi. Keep 6-week buffer."},
-    {id:"MT003",name:"High-Yield Rebar Y10",unit:"Tonnes",category:"Steel",totalOrdered:80,delivered:42,onSite:18,consumed:24,plannedConsumption:75,weeklyBurn:1.8,supplier:"Steel Africa (Nairobi)",lastDelivery:"2025-02-05",nextDelivery:"2025-02-26",notes:""},
-    {id:"MT004",name:"Coarse Aggregate 20mm",unit:"m³",category:"Aggregate",totalOrdered:1200,delivered:680,onSite:210,consumed:470,plannedConsumption:1100,weeklyBurn:38,supplier:"Rongo Quarry Ltd",lastDelivery:"2025-02-10",nextDelivery:"2025-02-17",notes:"Local supply — good availability. 2-day lead time."},
-    {id:"MT005",name:"Fine Aggregate (River Sand)",unit:"m³",category:"Aggregate",totalOrdered:600,delivered:340,onSite:95,consumed:245,plannedConsumption:550,weeklyBurn:18,supplier:"Awach River Sand",lastDelivery:"2025-02-09",nextDelivery:"2025-02-16",notes:""},
-    {id:"MT006",name:"BRC Mesh A142",unit:"Sheets",category:"Steel",totalOrdered:1800,delivered:820,onSite:240,consumed:580,plannedConsumption:1600,weeklyBurn:42,supplier:"Insteel Ltd (Kisumu)",lastDelivery:"2025-01-28",nextDelivery:"2025-02-25",notes:"Lead time 3 weeks — order placed."},
-    {id:"MT007",name:"Plywood Shuttering (18mm)",unit:"Sheets",category:"Formwork",totalOrdered:600,delivered:360,onSite:185,consumed:175,plannedConsumption:550,weeklyBurn:22,supplier:"Local Hardware Rongo",lastDelivery:"2025-02-06",nextDelivery:"2025-02-20",notes:"Reuse cycle ×4 tracked per sheet"},
-    {id:"MT008",name:"G25 Concrete (Ready-mix)",unit:"m³",category:"Concrete",totalOrdered:3200,delivered:1480,onSite:0,consumed:1480,plannedConsumption:3000,weeklyBurn:96,supplier:"Concrete Pro (Kisumu)",lastDelivery:"2025-02-12",nextDelivery:"On-demand",notes:"Ready-mix ordered per pour schedule. 48hr advance notice required."},
+    {id:"MT001",name:"OPC 42.5N Cement",unit:"Bags (50kg)",category:"Concrete",totalOrdered:2200,delivered:1680,onSite:380,consumed:1300,plannedConsumption:2000,weeklyBurn:85,supplier:"Bamburi / ARM Cement — Kisumu",lastDelivery:"2025-11-01",nextDelivery:"2025-11-22",notes:"Adequate stock for Phase 3 completion. Monitor Ph5 MEP slab requirements."},
+    {id:"MT002",name:"High-Yield Rebar Y16, Y20, Y25",unit:"Tonnes",category:"Steel",totalOrdered:42,delivered:32,onSite:8,consumed:24,plannedConsumption:40,weeklyBurn:1.8,supplier:"Industrial Steel Kenya / Devki — Kisumu",lastDelivery:"2025-10-28",nextDelivery:"2025-11-25",notes:"Critical item — order balance 10T en route. SE to confirm remaining structural requirements."},
+    {id:"MT003",name:"BRC Mesh A393 & A252",unit:"m²",category:"Steel",totalOrdered:1400,delivered:980,onSite:180,consumed:800,plannedConsumption:1300,weeklyBurn:42,supplier:"Steel & Tube Industries — Kisumu",lastDelivery:"2025-11-03",nextDelivery:"2025-11-24",notes:""},
+    {id:"MT004",name:"Crushed Aggregate 20mm",unit:"m³",category:"Aggregate",totalOrdered:180,delivered:140,onSite:35,consumed:105,plannedConsumption:170,weeklyBurn:8,supplier:"Local Quarry — Ahero Road, Kisumu",lastDelivery:"2025-11-05",nextDelivery:"Rolling",notes:"Local supply — good availability. 1-day lead from Ahero quarry."},
+    {id:"MT005",name:"Washed River Sand",unit:"m³",category:"Aggregate",totalOrdered:220,delivered:160,onSite:42,consumed:118,plannedConsumption:210,weeklyBurn:9,supplier:"Lake Basin Sand — Kisumu Port Area",lastDelivery:"2025-11-04",nextDelivery:"Rolling",notes:""},
+    {id:"MT006",name:"VMZinc Standing-Seam Roof (Imported)",unit:"m²",category:"Roofing",totalOrdered:500,delivered:500,onSite:500,consumed:0,plannedConsumption:500,weeklyBurn:0,supplier:"VMZinc Germany via Mombasa Port",lastDelivery:"2025-10-20",nextDelivery:"N/A — full order delivered",notes:"⚠ Full order on site. Store in covered warehouse — no direct UV exposure. Apply within 60 days."},
+    {id:"MT007",name:"Sika Bituseal Torch-On Membrane 4mm",unit:"m²",category:"Waterproofing",totalOrdered:700,delivered:700,onSite:520,consumed:180,plannedConsumption:700,weeklyBurn:0,supplier:"Sika Kenya Ltd — Nairobi",lastDelivery:"2025-09-15",nextDelivery:"N/A — stock on site",notes:"Roof application pending completion of trusses. DPC works complete."},
+    {id:"MT008",name:"Carrara White Marble 600×1200mm (Italy)",unit:"m²",category:"Finishes",totalOrdered:220,delivered:0,onSite:0,consumed:0,plannedConsumption:200,weeklyBurn:0,supplier:"Margraf Italy via Mombasa Port",lastDelivery:"Awaiting — ETA Jan 2026",nextDelivery:"Jan 2026",notes:"⚠ CRITICAL LEAD ITEM — 12 weeks. Order placed Aug-25. Track shipping weekly. No substitution."},
+    {id:"MT009",name:"Porcelanosa Spanish Porcelain 800×800mm",unit:"m²",category:"Finishes",totalOrdered:260,delivered:0,onSite:0,consumed:0,plannedConsumption:240,weeklyBurn:0,supplier:"Porcelanosa — Nairobi Agent",lastDelivery:"Awaiting — ETA Jan 2026",nextDelivery:"Jan 2026",notes:"⚠ 10-week lead. Order placed Oct-25. Deliver to climate-controlled storage on site."},
+    {id:"MT010",name:"Scavolini Italian Kitchen (Full Package)",unit:"Set",category:"Finishes",totalOrdered:1,delivered:0,onSite:0,consumed:0,plannedConsumption:1,weeklyBurn:0,supplier:"Scavolini Agent — Nairobi",lastDelivery:"Awaiting — ETA Feb 2026",nextDelivery:"Feb 2026",notes:"⚠ CRITICAL — 16-week lead. Order placed 01-Aug-25. Factory visit scheduled Dec-25. Air freight contingency pre-priced."},
+    {id:"MT011",name:"Bisazza Glass Mosaic Pool Tiles",unit:"m²",category:"Pool",totalOrdered:70,delivered:0,onSite:0,consumed:0,plannedConsumption:65,weeklyBurn:0,supplier:"Bisazza Italy via Mombasa Port",lastDelivery:"Awaiting — ETA Dec 2025",nextDelivery:"Dec 2025",notes:"⚠ 12-week lead. Order placed 01-Oct-25. Pool shell must pass pressure test before tiling."},
+    {id:"MT012",name:"WICONA/YKK Aluminium DG Windows & Doors",unit:"m²",category:"Finishes",totalOrdered:190,delivered:0,onSite:0,consumed:0,plannedConsumption:190,weeklyBurn:0,supplier:"YKK AP East Africa — Nairobi",lastDelivery:"Awaiting — ETA Dec 2025",nextDelivery:"Dec 2025",notes:"⚠ 10-week lead. Order placed mid-Oct-25. Thermal break frames — store flat, no bending."},
   ],
   provisions:RONGO_PROVISIONS,
 };
@@ -3428,7 +3515,7 @@ ${resXml}
   /* ── PROCORE JSON EXPORT ── */
   const exportProcore=()=>{
     const payload={
-      export_metadata:{generated:new Date().toISOString(),source:"AHP Command Centre v4",format:"procore-compatible"},
+      export_metadata:{generated:new Date().toISOString(),source:"Ojola Command Centre v4",format:"procore-compatible"},
       project:{name:site.name,location:site.location,client:site.client,contractor:site.contractor,
         start_date:site.startDate,target_completion:site.targetCompletion,contract_value:site.contractValue},
       schedule_items:wps.map((w,i)=>({
@@ -3871,7 +3958,7 @@ const pushSchedule = async (token, wps) => {
                 <div className="drop-zone" onClick={()=>openFilePicker(".json",importBackup)} onDragOver={e=>{e.preventDefault();e.stopPropagation();e.currentTarget.classList.add("drag");}} onDragLeave={e=>e.currentTarget.classList.remove("drag")} onDrop={e=>{e.currentTarget.classList.remove("drag");handleFileDrop(e,importBackup);}}>
                   <div style={{fontSize:"28px",marginBottom:"8px"}}>🗃</div>
                   <div style={{fontSize:"11px",fontWeight:"700",color:"var(--text)",marginBottom:"4px"}}>Drop backup .json here or click to browse</div>
-                  <div style={{fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>AHP Command Centre v4 backup files only</div>
+                  <div style={{fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>Ojola Command Centre v4 backup files only</div>
                 </div>
               </div>
               {importLog.length>0&&<div className="int-section">
@@ -3889,100 +3976,822 @@ const pushSchedule = async (token, wps) => {
   );
 }
 
+// ══════════════════════════════════════════════════════════════════
+// SAAS ENGINE — FCC_CONFIG · FCC_PLANS · FCC_ROLES · fccCan()
+// Supabase bridge · M-Pesa Daraja STK Push · Paystack fallback
+// ══════════════════════════════════════════════════════════════════
+
+/* ── 1. CONFIG BLOCK ─────────────────────────────────────────────
+   Before going live, paste your keys into this object.
+   The app works fully offline / localStorage if left blank.
+
+   PAYMENT OPTIONS (choose one or both):
+   A) M-Pesa Daraja STK Push (recommended for Kenya):
+      - Register at developer.safaricom.co.ke
+      - Create an app → get Consumer Key + Consumer Secret
+      - Set mpesaRelayUrl to your Supabase Edge Function URL
+      - Set mpesaShortcode to your Lipa Na M-Pesa shortcode (174379 for sandbox)
+      - Set mpesaPasskey from the Daraja portal
+
+   B) Paystack (Stripe's Kenya partner — cards + M-Pesa):
+      - Register at paystack.com (free, Kenya supported natively)
+      - Copy your Public Key from Settings → API
+   ────────────────────────────────────────────────────────────── */
+const FCC_CONFIG = {
+  supabaseUrl:     "",   // e.g. "https://xxxx.supabase.co"
+  supabaseKey:     "",   // anon/public key
+
+  // ── M-Pesa Daraja (primary Kenya payment) ──────────────────────
+  mpesaRelayUrl:   "",   // URL of your /mpesa-relay Supabase Edge Function
+  mpesaShortcode:  "174379",   // Lipa Na M-Pesa shortcode (174379 = sandbox)
+  mpesaPasskey:    "",   // From Daraja portal (sandbox has a default)
+  mpesaEnv:        "sandbox",  // "sandbox" | "live"
+
+  // ── Paystack fallback (cards + M-Pesa via Paystack) ────────────
+  paystackPublicKey: "",  // pk_test_... or pk_live_... from paystack.com
+};
+
+/* ── 2. PLANS ────────────────────────────────────────────────── */
+const FCC_PLANS = {
+  free:  { label:"Free",  price:0,       projectLimit:1,  members:1,  color:"#718096" },
+  pro:   { label:"Pro",   price:4900,    projectLimit:10, members:5,  color:"#3182CE" },
+  team:  { label:"Team",  price:14900,   projectLimit:99, members:25, color:"#805AD5" },
+};
+
+/* ── 3. ROLES & RBAC ─────────────────────────────────────────── */
+const FCC_ROLES = {
+  owner:  { label:"Owner",   can:["view","edit","delete","invite","billing","settings"] },
+  admin:  { label:"Admin",   can:["view","edit","delete","invite","settings"] },
+  member: { label:"Member",  can:["view","edit"] },
+  viewer: { label:"Viewer",  can:["view"] },
+};
+
+const fccCan = (user, action) => {
+  const role = user?.role || "viewer";
+  return (FCC_ROLES[role]?.can || []).includes(action);
+};
+
+/* ── 4. SUPABASE BRIDGE ──────────────────────────────────────── */
+const sbReady = () => FCC_CONFIG.supabaseUrl && FCC_CONFIG.supabaseKey;
+
+const sbFetch = async (path, opts={}) => {
+  const res = await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/${path}`, {
+    headers: {
+      "apikey": FCC_CONFIG.supabaseKey,
+      "Authorization": `Bearer ${FCC_CONFIG.supabaseKey}`,
+      "Content-Type": "application/json",
+      "Prefer": "return=representation",
+      ...(opts.headers||{})
+    },
+    ...opts
+  });
+  if(!res.ok) throw new Error(await res.text());
+  return res.json();
+};
+
+const sbSignup = async (name, email, password) => {
+  if(!sbReady()) {
+    // local-first fallback
+    const u = { id:"local-"+Date.now(), name, email, role:"owner", plan:"free", org:"Local Org", createdAt:new Date().toISOString() };
+    try{ localStorage.setItem("fcc_user", JSON.stringify(u)); }catch{}
+    return { user:u };
+  }
+  const res = await fetch(`${FCC_CONFIG.supabaseUrl}/auth/v1/signup`, {
+    method:"POST",
+    headers:{ "apikey":FCC_CONFIG.supabaseKey, "Content-Type":"application/json" },
+    body: JSON.stringify({ email, password, data:{ name } })
+  });
+  const data = await res.json();
+  if(data.error) throw new Error(data.error.message||data.error);
+  const u = { id:data.user?.id, name, email, role:"owner", plan:"free", org:"", createdAt:new Date().toISOString(), access_token:data.access_token };
+  try{ localStorage.setItem("fcc_user", JSON.stringify(u)); }catch{}
+  return { user:u };
+};
+
+const sbLogin = async (email, password) => {
+  if(!sbReady()) {
+    // local-first: check stored user
+    let stored=null;
+    try{ stored=JSON.parse(localStorage.getItem("fcc_user")); }catch{}
+    if(stored && stored.email===email) return { user:stored };
+    throw new Error("No account found. Please sign up first.");
+  }
+  const res = await fetch(`${FCC_CONFIG.supabaseUrl}/auth/v1/token?grant_type=password`, {
+    method:"POST",
+    headers:{ "apikey":FCC_CONFIG.supabaseKey, "Content-Type":"application/json" },
+    body: JSON.stringify({ email, password })
+  });
+  const data = await res.json();
+  if(data.error) throw new Error(data.error.message||data.error);
+  const u = { id:data.user?.id, name:data.user?.user_metadata?.name||email.split("@")[0], email, role:"owner", plan:"free", org:"", access_token:data.access_token };
+  try{ localStorage.setItem("fcc_user", JSON.stringify(u)); }catch{}
+  return { user:u };
+};
+
+const sbLoadProjects = async (userId) => {
+  if(!sbReady()) {
+    try{ return JSON.parse(localStorage.getItem("ahp_projects"))||[]; }catch{ return []; }
+  }
+  try{
+    const rows = await sbFetch(`fcc_projects?owner_id=eq.${userId}&order=created_at.desc`);
+    return rows.map(r=>r.data||r);
+  }catch(e){ try{ return JSON.parse(localStorage.getItem("ahp_projects"))||[]; }catch{ return []; } }
+};
+
+const sbSaveProject = async (userId, project) => {
+  // Always write to localStorage (offline-first)
+  try{
+    const all = JSON.parse(localStorage.getItem("ahp_projects"))||[];
+    const idx = all.findIndex(p=>p.id===project.id);
+    if(idx>=0) all[idx]=project; else all.push(project);
+    localStorage.setItem("ahp_projects", JSON.stringify(all));
+  }catch{}
+  // Best-effort Supabase upsert
+  if(!sbReady()||!userId) return;
+  try{
+    await sbFetch(`fcc_projects?id=eq.${project.id}`, {
+      method:"POST",
+      headers:{ "Prefer":"resolution=merge-duplicates" },
+      body: JSON.stringify({ id:project.id, owner_id:userId, data:project, updated_at:new Date().toISOString() })
+    });
+  }catch(e){ console.warn("Supabase save skipped:",e.message); }
+};
+
+/* ── 5. M-PESA DARAJA STK PUSH + PAYSTACK CHECKOUT ──────────── */
+
+// Format phone to 254XXXXXXXXX
+const normalizeMpesaPhone = (phone) => {
+  const d = phone.replace(/\D/g, "");
+  if(d.startsWith("254")) return d;
+  if(d.startsWith("0")) return "254" + d.slice(1);
+  if(d.startsWith("7") || d.startsWith("1")) return "254" + d;
+  return d;
+};
+
+// Generate Daraja password (base64 of shortcode + passkey + timestamp)
+const darajaPassword = (shortcode, passkey, timestamp) => {
+  const raw = shortcode + passkey + timestamp;
+  try { return btoa(raw); } catch { return btoa(unescape(encodeURIComponent(raw))); }
+};
+
+// Format YYYYMMDDHHMMSS timestamp
+const darajaTimestamp = () => {
+  const d = new Date();
+  const pad = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+};
+
+// Initiate STK Push via the relay Edge Function (avoids CORS)
+// The relay calls Safaricom on the server side and returns the response.
+const initMpesaStkPush = async (phone, amount, planLabel, userEmail) => {
+  if(!FCC_CONFIG.mpesaRelayUrl) throw new Error("mpesaRelayUrl not configured in FCC_CONFIG.");
+  const timestamp = darajaTimestamp();
+  const password  = darajaPassword(FCC_CONFIG.mpesaShortcode, FCC_CONFIG.mpesaPasskey || "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919", timestamp);
+  const payload = {
+    env:              FCC_CONFIG.mpesaEnv || "sandbox",
+    shortcode:        FCC_CONFIG.mpesaShortcode,
+    password,
+    timestamp,
+    amount:           Math.ceil(amount),
+    phone:            normalizeMpesaPhone(phone),
+    accountReference: `FCC-${planLabel.toUpperCase()}`,
+    transactionDesc:  `Field Command Center ${planLabel} plan`,
+    callbackUrl:      FCC_CONFIG.mpesaRelayUrl + "/callback",
+  };
+  const res = await fetch(FCC_CONFIG.mpesaRelayUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if(!res.ok || data.ResponseCode !== "0") throw new Error(data.ResponseDescription || data.errorMessage || "STK Push failed");
+  return data; // { CheckoutRequestID, MerchantRequestID, ResponseCode, CustomerMessage }
+};
+
+// Paystack inline checkout (cards + M-Pesa via Paystack JS SDK)
+const openPaystackCheckout = (plan, amount, userEmail, onSuccess) => {
+  if(!FCC_CONFIG.paystackPublicKey) {
+    alert("Paystack not configured yet. Add paystackPublicKey to FCC_CONFIG.\n\nAlternatively configure mpesaRelayUrl for direct M-Pesa STK Push.");
+    return;
+  }
+  // Dynamically load Paystack inline JS if not already loaded
+  const load = (cb) => {
+    if(window.PaystackPop) { cb(); return; }
+    const s = document.createElement("script");
+    s.src = "https://js.paystack.co/v1/inline.js";
+    s.onload = cb;
+    document.head.appendChild(s);
+  };
+  load(() => {
+    const handler = window.PaystackPop.setup({
+      key:       FCC_CONFIG.paystackPublicKey,
+      email:     userEmail || "user@fcc.app",
+      amount:    amount * 100, // Paystack expects kobo/cents (KES * 100)
+      currency:  "KES",
+      ref:       "FCC-" + Date.now(),
+      metadata:  { plan, custom_fields: [{ display_name: "Plan", variable_name: "plan", value: plan }] },
+      channels:  ["card", "mobile_money", "bank_transfer"],
+      callback:  (response) => { if(onSuccess) onSuccess(response.reference); },
+      onClose:   () => {}
+    });
+    handler.openIframe();
+  });
+};
+
+// React component: M-Pesa payment modal (STK Push flow)
+function MpesaPayModal({ plan, amount, userEmail, onSuccess, onClose }) {
+  const [phone, setPhone]       = useState("");
+  const [status, setStatus]     = useState("idle"); // idle | sending | waiting | done | error
+  const [msg, setMsg]           = useState("");
+  const [checkoutId, setCheckoutId] = useState(null);
+  const PLAN_COLORS = { pro: "var(--accent)", team: "var(--purple)" };
+  const color = PLAN_COLORS[plan] || "var(--accent)";
+
+  const handleSTK = async () => {
+    if(!phone || phone.replace(/\D/g,"").length < 9) { setMsg("Enter a valid M-Pesa number e.g. 0712345678"); return; }
+    setStatus("sending"); setMsg("");
+    try {
+      const res = await initMpesaStkPush(phone, amount, plan, userEmail);
+      setCheckoutId(res.CheckoutRequestID);
+      setStatus("waiting");
+      setMsg("M-Pesa prompt sent! Enter your PIN on your phone to complete payment. This screen will update automatically.");
+      // Poll for completion (simplified — production should use Supabase Realtime)
+      let tries = 0;
+      const poll = setInterval(async () => {
+        tries++;
+        if(tries > 24) { clearInterval(poll); setStatus("error"); setMsg("Timed out waiting for payment. If you paid, add ?upgraded=" + plan + " to your URL."); }
+        // In sandbox/dev, auto-resolve after 8s for demo purposes
+        if(FCC_CONFIG.mpesaEnv === "sandbox" && tries >= 4) {
+          clearInterval(poll);
+          setStatus("done");
+          setMsg("✓ Sandbox payment confirmed! Your plan is now " + plan.toUpperCase() + ".");
+          setTimeout(() => { if(onSuccess) onSuccess("SANDBOX-" + Date.now()); }, 1200);
+        }
+      }, 2000);
+    } catch(e) {
+      setStatus("error");
+      setMsg("Error: " + e.message);
+    }
+  };
+
+  return (
+    <>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"var(--overlay)",zIndex:600}}/>
+      <div style={{
+        position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
+        width:"min(380px,94vw)",background:"var(--modal-bg)",
+        border:`1px solid ${color}55`,borderRadius:"12px",zIndex:601,
+        boxShadow:"0 20px 60px rgba(0,0,0,0.35)",padding:"24px",
+        animation:"fadeUp 0.2s ease"
+      }}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"16px"}}>
+          <div>
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:color,textTransform:"uppercase",letterSpacing:"0.12em"}}>M-PESA PAYMENT</div>
+            <div style={{fontSize:"18px",fontWeight:"900",color:"var(--text)",marginTop:"2px"}}>
+              Upgrade to {plan.charAt(0).toUpperCase()+plan.slice(1)}
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"var(--text3)",fontSize:"20px",cursor:"pointer",padding:"4px"}}>✕</button>
+        </div>
+
+        {/* Amount display */}
+        <div style={{background:"var(--surface)",border:`1px solid ${color}44`,borderRadius:"8px",padding:"14px",marginBottom:"18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)"}}>AMOUNT DUE</div>
+            <div style={{fontSize:"24px",fontWeight:"900",color:color,lineHeight:1.1}}>KES {amount.toLocaleString()}</div>
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",marginTop:"2px"}}>per month</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:"28px"}}>🇰🇪</div>
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--green)",marginTop:"2px",fontWeight:"700"}}>LIPA NA M-PESA</div>
+          </div>
+        </div>
+
+        {/* Phone input */}
+        {(status==="idle"||status==="error") && (
+          <div style={{marginBottom:"14px"}}>
+            <label style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.1em",display:"block",marginBottom:"6px"}}>
+              M-Pesa Phone Number
+            </label>
+            <input
+              type="tel"
+              placeholder="e.g. 0712 345 678"
+              value={phone}
+              onChange={e=>setPhone(e.target.value)}
+              onKeyDown={e=>e.key==="Enter"&&handleSTK()}
+              style={{width:"100%",boxSizing:"border-box",padding:"12px 14px",background:"var(--bg)",border:`1px solid ${status==="error"?"var(--red)":"var(--border)"}`,borderRadius:"6px",color:"var(--text)",fontSize:"15px",fontFamily:"'Share Tech Mono',monospace",outline:"none"}}
+            />
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",marginTop:"6px"}}>
+              Safaricom number registered with M-Pesa · You will receive an STK push prompt
+            </div>
+          </div>
+        )}
+
+        {/* Status messages */}
+        {msg && (
+          <div style={{
+            background: status==="done" ? "var(--green)18" : status==="error" ? "var(--red)18" : "var(--accent)12",
+            border: `1px solid ${status==="done" ? "var(--green)44" : status==="error" ? "var(--red)44" : "var(--accent)33"}`,
+            borderRadius:"6px",padding:"10px 12px",marginBottom:"14px",
+            fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",lineHeight:1.6,
+            color: status==="done" ? "var(--green)" : status==="error" ? "var(--red)" : "var(--text2)"
+          }}>
+            {status==="waiting" && <span style={{marginRight:"6px"}}>⏳</span>}
+            {status==="done"    && <span style={{marginRight:"6px"}}>✓</span>}
+            {status==="error"   && <span style={{marginRight:"6px"}}>✗</span>}
+            {msg}
+          </div>
+        )}
+
+        {/* Waiting spinner */}
+        {status==="waiting" && (
+          <div style={{textAlign:"center",padding:"12px 0",marginBottom:"8px"}}>
+            <div style={{display:"inline-block",width:"28px",height:"28px",border:"3px solid var(--border)",borderTopColor:color,borderRadius:"50%",animation:"spin 0.9s linear infinite"}}/>
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",marginTop:"8px"}}>Waiting for M-Pesa confirmation…</div>
+          </div>
+        )}
+
+        {/* Action buttons */}
+        {(status==="idle"||status==="error") && (
+          <button onClick={handleSTK} className="btn-primary" style={{width:"100%",fontSize:"11px",padding:"13px",letterSpacing:"0.08em",background:color,borderRadius:"6px"}}>
+            📲  Send M-Pesa Prompt
+          </button>
+        )}
+
+        {/* Footer */}
+        <div style={{marginTop:"14px",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",lineHeight:1.6,textAlign:"center",borderTop:"1px solid var(--border)",paddingTop:"10px"}}>
+          Powered by Safaricom Daraja API · Lipa Na M-Pesa Online<br/>
+          Your PIN is never shared with Field Command Center
+        </div>
+      </div>
+    </>
+  );
+}
+
+// Unified upgrade launcher — tries M-Pesa first, falls back to Paystack
+const openPaymentCheckout = (plan, amount, userEmail, setMpesaModal) => {
+  if(FCC_CONFIG.mpesaRelayUrl) {
+    // Show M-Pesa modal
+    setMpesaModal({ plan, amount, userEmail });
+  } else if(FCC_CONFIG.paystackPublicKey) {
+    openPaystackCheckout(plan, amount, userEmail, (ref) => {
+      window.location.href = window.location.pathname + "?upgraded=" + plan + "&ref=" + ref;
+    });
+  } else {
+    // Neither configured — show setup instructions
+    alert(
+      "Payment not configured yet.\n\n" +
+      "For M-Pesa (recommended):\n" +
+      "  1. Register at developer.safaricom.co.ke\n" +
+      "  2. Deploy the /mpesa-relay Edge Function (see README)\n" +
+      "  3. Set FCC_CONFIG.mpesaRelayUrl\n\n" +
+      "For Paystack (cards + M-Pesa):\n" +
+      "  1. Register at paystack.com\n" +
+      "  2. Set FCC_CONFIG.paystackPublicKey"
+    );
+  }
+};
+
+// Legacy alias so any code still calling openStripeCheckout keeps working
+const openStripeCheckout = (plan, userEmail) => {
+  const amount = FCC_PLANS[plan]?.price || 0;
+  // We need setMpesaModal but don't have it at this scope —
+  // the alias is a no-op stub; all real calls have been updated below.
+  openPaystackCheckout(plan, amount, userEmail, (ref) => {
+    window.location.href = window.location.pathname + "?upgraded=" + plan + "&ref=" + ref;
+  });
+};
+
+/* ── 6. INVITE TOKEN ACCEPTANCE ──────────────────────────────── */
+const readInviteToken = () => {
+  try{ return new URLSearchParams(window.location.search).get("invite")||null; }catch{ return null; }
+};
+
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
-/* ═══════════════════════════════════════════════════════════
-   REGISTRATION SCREEN
-   Collects name + email on first launch.
-   Sends to Google Sheets via Apps Script Web App URL.
-   ─────────────────────────────────────────────────────────
-   SETUP (one-time, 5 minutes):
-   1. Go to script.google.com → New project
-   2. Paste this code into the editor:
-      function doPost(e){
-        var ss=SpreadsheetApp.openById("YOUR_SHEET_ID");
-        var ws=ss.getSheetByName("Users")||ss.insertSheet("Users");
-        if(ws.getLastRow()===0) ws.appendRow(["Timestamp","Name","Email","Version"]);
-        var d=JSON.parse(e.postData.contents);
-        ws.appendRow([new Date(),d.name,d.email,d.version]);
-        return ContentService.createTextOutput("ok");
-      }
-   3. Deploy → New deployment → Web app → Execute as Me → Anyone
-   4. Copy the Web App URL and paste it as APPS_SCRIPT_URL below
-   ═══════════════════════════════════════════════════════════ */
 
-// ── REPLACE THIS URL with your Apps Script Web App URL ──────
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxr-Im0M8ARgtQTugsoMvP1mhx6qz7tPnl2XEkKNAsJyqtYPJ3IDGu5IMxn_c60fV38kQ/exec";
-// ────────────────────────────────────────────────────────────
+/* ── AUTH SCREEN (split-panel: login + signup, pricing panel) ── */
+function AuthScreen({ onAuth }) {
+  const [mpesaModal, setMpesaModal] = React.useState(null); // {plan,amount,userEmail}
+  const [mode, setMode] = useState(() => readInviteToken() ? "signup" : "login");
+  const [step, setStep] = useState(1); // 1=credentials, 2=org details
+  const [form, setForm] = useState({ name:"", email:"", password:"", org:"", role:"owner", inviteToken: readInviteToken()||"" });
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const up = (k,v) => setForm(f=>({...f,[k]:v}));
 
-function RegistrationScreen({onComplete}){
-  const [name,setName]=useState("");
-  const [email,setEmail]=useState("");
-  const [status,setStatus]=useState(""); // "sending" | "done" | "error"
+  // Auto-detect upgrade from Stripe redirect
+  const upgraded = new URLSearchParams(window.location.search).get("upgraded");
 
-  const isValid=name.trim().length>1 && email.includes("@") && email.includes(".");
-
-  const handleSubmit=async()=>{
-    if(!isValid) return;
-    setStatus("sending");
+  const doLogin = async () => {
+    if(!form.email||!form.password){ setErr("Please fill in email and password."); return; }
+    setBusy(true); setErr("");
     try{
-      // Send to Google Sheets
-      if(APPS_SCRIPT_URL && APPS_SCRIPT_URL!=="YOUR_APPS_SCRIPT_URL_HERE"){
-        await fetch(APPS_SCRIPT_URL,{
-          method:"POST",
-          mode:"no-cors",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({name:name.trim(),email:email.trim(),version:"v4"})
-        });
-      }
-      // Track in GA
-      if(window.fccTrack) window.fccTrack("user_registered",{name:name.trim()});
-    }catch(e){ /* continue even if network fails */ }
-    // Store locally so they never see this again
-    try{localStorage.setItem("ahp_registered",JSON.stringify({name:name.trim(),email:email.trim(),ts:new Date().toISOString()}));}catch(e){}
-    setStatus("done");
-    setTimeout(()=>onComplete({name:name.trim(),email:email.trim()}),600);
+      const { user } = await sbLogin(form.email.trim(), form.password);
+      onAuth(user);
+    }catch(e){ setErr(e.message); }
+    setBusy(false);
   };
 
-  const skip=()=>{
-    try{localStorage.setItem("ahp_registered",JSON.stringify({name:"",email:"",ts:new Date().toISOString(),skipped:true}));}catch(e){}
-    onComplete({name:"",email:""});
+  const doSignupStep1 = () => {
+    if(!form.name.trim()||!form.email.trim()||form.password.length<6){
+      setErr("Name, email and password (min 6 chars) required."); return;
+    }
+    setErr(""); setStep(2);
   };
 
-  return(
-    <div className="reg-screen">
-      <div className="reg-box">
-        <div className="reg-logo">Field Command Centre</div>
-        <div className="reg-title">Site Management · Built for Engineers</div>
-        <div className="reg-tagline">
-          Enter your details to activate the tool and receive updates when new features are released.
+  const doSignupStep2 = async () => {
+    setBusy(true); setErr("");
+    try{
+      const { user } = await sbSignup(form.name.trim(), form.email.trim(), form.password);
+      const u = { ...user, org: form.org||"My Organisation", role: form.role };
+      if(upgraded) u.plan = upgraded;
+      if(form.inviteToken) u.inviteToken = form.inviteToken;
+      try{ localStorage.setItem("fcc_user", JSON.stringify(u)); }catch{}
+      onAuth(u);
+    }catch(e){ setErr(e.message); }
+    setBusy(false);
+  };
+
+  const planFeatures = [
+    { plan:"free",  icon:"🔧", feats:["1 project","1 user","Local storage","All field modules"] },
+    { plan:"pro",   icon:"⚡", feats:["10 projects","5 members","Supabase sync","Priority support"] },
+    { plan:"team",  icon:"🏗",  feats:["Unlimited projects","25 members","Org management","White-label export"] },
+  ];
+
+  return (
+    <>
+    <div style={{position:"fixed",inset:0,background:"var(--bg)",display:"flex",zIndex:950,animation:"fadeIn 0.3s"}}>
+      {/* LEFT — form panel */}
+      <div style={{flex:"0 0 min(480px,100%)",background:"var(--surface)",borderRight:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"auto",position:"relative"}}>
+        <div style={{position:"absolute",top:0,left:0,right:0,height:"3px",background:"var(--gradient)"}}/>
+        <div style={{padding:"40px 40px 32px",flex:1}}>
+          {/* Logo */}
+          <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"36px"}}>
+            <div style={{width:"36px",height:"36px",background:"var(--accent)",borderRadius:"8px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",fontWeight:"900",color:"#fff",fontFamily:"'Bebas Neue',sans-serif"}}>⌘</div>
+            <div>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"20px",letterSpacing:"0.08em",color:"var(--text)",lineHeight:1}}>Field Command</div>
+              <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",letterSpacing:"0.18em",textTransform:"uppercase"}}>Construction Intelligence Platform</div>
+            </div>
+          </div>
+
+          {form.inviteToken&&(
+            <div style={{background:"var(--green)15",border:"1px solid var(--green)44",borderRadius:"6px",padding:"10px 12px",marginBottom:"20px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--green)"}}>
+              🎫 Invite token detected — sign up to join your team
+            </div>
+          )}
+          {upgraded&&(
+            <div style={{background:"var(--accent)15",border:"1px solid var(--accent)44",borderRadius:"6px",padding:"10px 12px",marginBottom:"20px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--accent)"}}>
+              ✓ Payment successful — your {upgraded} plan is now active
+            </div>
+          )}
+
+          {/* Mode toggle */}
+          <div style={{display:"flex",background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"6px",padding:"3px",marginBottom:"28px"}}>
+            {["login","signup"].map(m=>(
+              <button key={m} onClick={()=>{setMode(m);setStep(1);setErr("");}}
+                style={{flex:1,background:mode===m?"var(--accent)":"none",border:"none",color:mode===m?"#fff":"var(--text3)",padding:"8px",fontFamily:"'Share Tech Mono',monospace",fontSize:"10px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.1em",borderRadius:"4px",cursor:"pointer",transition:"all 0.2s"}}>
+                {m==="login"?"Sign In":"Create Account"}
+              </button>
+            ))}
+          </div>
+
+          {mode==="login"&&(
+            <div>
+              <div style={{fontSize:"22px",fontWeight:"900",color:"var(--text)",marginBottom:"4px"}}>Welcome back</div>
+              <div style={{fontSize:"12px",color:"var(--text3)",marginBottom:"24px"}}>Sign in to your Field Command account</div>
+              <div className="field-group">
+                <label className="field-label">Email address</label>
+                <input className="field-input" type="email" placeholder="you@example.com" value={form.email}
+                  onChange={e=>up("email",e.target.value)} onKeyDown={e=>e.key==="Enter"&&doLogin()} autoFocus/>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Password</label>
+                <input className="field-input" type="password" placeholder="••••••••" value={form.password}
+                  onChange={e=>up("password",e.target.value)} onKeyDown={e=>e.key==="Enter"&&doLogin()}/>
+              </div>
+              {err&&<div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--red)",marginBottom:"12px"}}>{err}</div>}
+              <button className="btn-primary" style={{width:"100%",padding:"13px",fontSize:"11px",opacity:busy?0.6:1}} onClick={doLogin} disabled={busy}>
+                {busy?"Signing in…":"Sign In →"}
+              </button>
+              <button onClick={()=>{ try{localStorage.setItem("fcc_user",JSON.stringify({id:"guest",name:"Guest",email:"",role:"viewer",plan:"free",org:""}));}catch{}onAuth({id:"guest",name:"Guest",email:"",role:"viewer",plan:"free",org:""}); }}
+                style={{background:"none",border:"none",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",cursor:"pointer",width:"100%",marginTop:"10px",padding:"4px",textDecoration:"underline"}}>
+                Continue as guest (read-only)
+              </button>
+            </div>
+          )}
+
+          {mode==="signup"&&step===1&&(
+            <div>
+              <div style={{fontSize:"22px",fontWeight:"900",color:"var(--text)",marginBottom:"4px"}}>Create account</div>
+              <div style={{fontSize:"12px",color:"var(--text3)",marginBottom:"24px"}}>Step 1 of 2 — Your credentials</div>
+              <div className="field-group">
+                <label className="field-label">Full name</label>
+                <input className="field-input" placeholder="Susan A. Ochieng" value={form.name}
+                  onChange={e=>up("name",e.target.value)} autoFocus/>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Work email</label>
+                <input className="field-input" type="email" placeholder="you@firm.com" value={form.email}
+                  onChange={e=>up("email",e.target.value)}/>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Password (min 6 characters)</label>
+                <input className="field-input" type="password" placeholder="••••••••" value={form.password}
+                  onChange={e=>up("password",e.target.value)} onKeyDown={e=>e.key==="Enter"&&doSignupStep1()}/>
+              </div>
+              {err&&<div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--red)",marginBottom:"12px"}}>{err}</div>}
+              <button className="btn-primary" style={{width:"100%",padding:"13px",fontSize:"11px"}} onClick={doSignupStep1}>
+                Continue →
+              </button>
+            </div>
+          )}
+
+          {mode==="signup"&&step===2&&(
+            <div>
+              <div style={{fontSize:"22px",fontWeight:"900",color:"var(--text)",marginBottom:"4px"}}>Almost there</div>
+              <div style={{fontSize:"12px",color:"var(--text3)",marginBottom:"24px"}}>Step 2 of 2 — Your organisation</div>
+              <div className="field-group">
+                <label className="field-label">Organisation / Firm name</label>
+                <input className="field-input" placeholder="e.g. PMC Supervision Ltd" value={form.org}
+                  onChange={e=>up("org",e.target.value)} autoFocus/>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Your role</label>
+                <select className="field-select" value={form.role} onChange={e=>up("role",e.target.value)}>
+                  <option value="owner">Owner / Director</option>
+                  <option value="admin">Project Manager / RE</option>
+                  <option value="member">Engineer / Supervisor</option>
+                  <option value="viewer">Client / Stakeholder</option>
+                </select>
+              </div>
+              {form.inviteToken&&(
+                <div className="field-group">
+                  <label className="field-label">Invite token</label>
+                  <input className="field-input" value={form.inviteToken} onChange={e=>up("inviteToken",e.target.value)}/>
+                </div>
+              )}
+              {err&&<div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--red)",marginBottom:"12px"}}>{err}</div>}
+              <div style={{display:"flex",gap:"8px"}}>
+                <button className="btn-ghost" onClick={()=>{setStep(1);setErr("");}}>← Back</button>
+                <button className="btn-primary" style={{flex:1,padding:"13px",fontSize:"11px",opacity:busy?0.6:1}} onClick={doSignupStep2} disabled={busy}>
+                  {busy?"Creating account…":"Create Account ✓"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div style={{marginTop:"28px",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",lineHeight:1.6,textAlign:"center"}}>
+            By continuing you agree to the Field Command Terms of Service.<br/>
+            Your data stays on your device unless Supabase is configured.
+          </div>
         </div>
-        <div className="field-group">
-          <label className="field-label">Your Name</label>
-          <input className="field-input" placeholder="e.g. John Kamau" value={name} onChange={e=>setName(e.target.value)}
-            onKeyDown={e=>{if(e.key==="Enter")document.getElementById("reg-email-input").focus();}}
-            autoFocus/>
+      </div>
+
+      {/* RIGHT — pricing preview (hidden on small screens) */}
+      <div className="hide-mobile" style={{flex:1,background:"var(--bg)",padding:"40px",overflowY:"auto",display:"flex",flexDirection:"column",justifyContent:"center"}}>
+        <div style={{maxWidth:"420px",margin:"0 auto"}}>
+          <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.18em",marginBottom:"8px"}}>Pricing</div>
+          <div style={{fontSize:"28px",fontWeight:"900",color:"var(--text)",lineHeight:1.2,marginBottom:"8px"}}>FIELD COMMAND<br/><span style={{color:"var(--accent)"}}>FOR EVERY SITE.</span></div>
+          <div style={{fontSize:"12px",color:"var(--text3)",marginBottom:"28px",lineHeight:1.6}}>From solo REs to enterprise PMCs. All plans include all field modules — phases, work packages, diary, risks, provisions, and integrations.</div>
+          {planFeatures.map(({plan,icon,feats})=>{
+            const p = FCC_PLANS[plan];
+            return(
+              <div key={plan} style={{background:"var(--surface)",border:`1px solid ${plan==="pro"?"var(--accent)":"var(--border)"}`,borderRadius:"8px",padding:"16px",marginBottom:"10px",position:"relative",boxShadow:plan==="pro"?"0 0 0 3px var(--accent)22":"none"}}>
+                {plan==="pro"&&<div style={{position:"absolute",top:"-10px",right:"12px",background:"var(--accent)",color:"#fff",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",fontWeight:"700",padding:"2px 8px",borderRadius:"3px",letterSpacing:"0.1em"}}>MOST POPULAR</div>}
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                    <span style={{fontSize:"20px"}}>{icon}</span>
+                    <div>
+                      <div style={{fontSize:"14px",fontWeight:"900",color:"var(--text)"}}>{p.label}</div>
+                      <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:p.color}}>{p.projectLimit===99?"Unlimited":p.projectLimit} projects · {p.members===25?"25":p.members} member{p.members!==1?"s":""}</div>
+                    </div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:"20px",fontWeight:"900",color:p.color,lineHeight:1}}>{p.price===0?"Free":`KES ${p.price.toLocaleString()}`}</div>
+                    {p.price>0&&<div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)"}}>/ month</div>}
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
+                  {feats.map(f=><span key={f} style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"3px",padding:"2px 7px",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text3)"}}>{f}</span>)}
+                </div>
+                {plan!=="free"&&(
+                  <button onClick={()=>openPaymentCheckout(plan,p.price,form.email,setMpesaModal)}
+                    style={{marginTop:"10px",width:"100%",background:plan==="pro"?"var(--accent)":"var(--purple)",border:"none",color:"#fff",padding:"8px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.1em",borderRadius:"4px",cursor:"pointer"}}>
+                    📲 Lipa · KES {p.price.toLocaleString()}/mo →
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",marginTop:"16px",lineHeight:1.6,textAlign:"center"}}>
+            All plans start free · No credit card for Free tier<br/>Lipa Na M-Pesa · Paystack · Cancel anytime
+          </div>
         </div>
-        <div className="field-group">
-          <input id="reg-email-input" className="field-input" type="email" placeholder="your@email.com"
-            value={email} onChange={e=>setEmail(e.target.value)}
-            onKeyDown={e=>{if(e.key==="Enter"&&isValid)handleSubmit();}}/>
-        </div>
-        <button className="btn-primary" style={{width:"100%",opacity:isValid?1:0.45,cursor:isValid?"pointer":"default",fontSize:"11px",padding:"12px"}}
-          onClick={handleSubmit} disabled={!isValid||status==="sending"||status==="done"}>
-          {status==="sending"?"Activating..."
-           :status==="done"?"✓ Activated — Loading..."
-           :"Activate Free Access →"}
-        </button>
-        <div className="reg-status" style={{color:status==="done"?"var(--green)":status==="error"?"var(--red)":"var(--text4)"}}>
-          {status==="done"&&"✓ Registered successfully"}
-        </div>
-        <div className="reg-note">
-          No password needed. No subscription.<br/>
-          Your data stays on your device.
-        </div>
-        <button className="reg-skip" onClick={skip}>Skip registration →</button>
       </div>
     </div>
+    {mpesaModal && (
+      <MpesaPayModal
+        plan={mpesaModal.plan}
+        amount={mpesaModal.amount}
+        userEmail={mpesaModal.userEmail||form.email}
+        onSuccess={(ref) => {
+          setMpesaModal(null);
+          // Store upgraded plan locally and reload
+          try {
+            const u = JSON.parse(localStorage.getItem("fcc_user")||"null");
+            if(u){ u.plan = mpesaModal.plan; localStorage.setItem("fcc_user", JSON.stringify(u)); }
+          }catch{}
+          window.location.href = window.location.pathname + "?upgraded=" + mpesaModal.plan;
+        }}
+        onClose={() => setMpesaModal(null)}
+      />
+    )}
+    </>
+  );
+}
+
+/* ── ORG MANAGEMENT PANEL ──────────────────────────────────────── */
+function OrgPanel({ currentUser, onClose, onUpgrade, showToast }) {
+  const [mpesaModal, setMpesaModal] = React.useState(null);
+  const [tab, setTab] = useState("members");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("member");
+  const [members, setMembers] = useState(()=>{
+    try{ return JSON.parse(localStorage.getItem("fcc_org_members"))||[
+      { id: currentUser?.id||"u1", name: currentUser?.name||"You", email: currentUser?.email||"", role:"owner", status:"active", joined: new Date().toISOString().slice(0,10) }
+    ]; }catch{ return []; }
+  });
+  const [orgName, setOrgName] = useState(currentUser?.org||"My Organisation");
+  const plan = FCC_PLANS[currentUser?.plan||"free"];
+
+  const saveMembers = (m) => {
+    setMembers(m);
+    try{ localStorage.setItem("fcc_org_members", JSON.stringify(m)); }catch{}
+  };
+
+  const sendInvite = () => {
+    if(!inviteEmail.includes("@")){ showToast("⚠ Enter a valid email"); return; }
+    const planLimit = FCC_PLANS[currentUser?.plan||"free"].members;
+    if(members.length>=planLimit){ showToast(`⚠ Member limit (${planLimit}) reached on ${plan.label} plan`); return; }
+    const token = btoa(inviteEmail+":"+Date.now()).slice(0,16);
+    const newM = [...members, { id:"inv-"+Date.now(), name:inviteEmail.split("@")[0], email:inviteEmail, role:inviteRole, status:"invited", joined:"—", token }];
+    saveMembers(newM);
+    const link = `${window.location.href.split("?")[0]}?invite=${token}`;
+    navigator.clipboard.writeText(link).catch(()=>{});
+    showToast("✓ Invite link copied — " + inviteEmail);
+    setInviteEmail("");
+  };
+
+  const TABS = [
+    { id:"members", label:"Members" },
+    { id:"invite",  label:"Invite" },
+    { id:"billing", label:"Plan & Billing" },
+    { id:"settings",label:"Settings" },
+  ];
+
+  return (
+    <>
+      <div className="edit-overlay" onClick={onClose}/>
+      <div className="edit-panel" style={{width:"min(520px,100vw)"}}>
+        <div style={{padding:"20px 24px",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between",background:"var(--bg)",position:"sticky",top:0,zIndex:10}}>
+          <div>
+            <div style={{fontSize:"14px",fontWeight:"900",color:"var(--text)"}}>{orgName}</div>
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--accent)",textTransform:"uppercase",letterSpacing:"0.1em"}}>{plan.label} Plan · {members.length}/{plan.members} members</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:"18px",padding:"4px"}}>✕</button>
+        </div>
+
+        <div style={{display:"flex",borderBottom:"1px solid var(--border)",background:"var(--bg)",overflowX:"auto",padding:"0 8px"}}>
+          {TABS.map(t=>(
+            <button key={t.id} className={`edit-tab ${tab===t.id?"active":""}`} onClick={()=>setTab(t.id)}>{t.label}</button>
+          ))}
+        </div>
+
+        <div style={{flex:1,overflow:"auto",padding:"20px 24px"}}>
+
+          {tab==="members"&&(
+            <div>
+              <div className="edit-section-title">Team Members ({members.length})</div>
+              {members.map(m=>(
+                <div key={m.id} style={{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"5px",marginBottom:"8px"}}>
+                  <div style={{width:"36px",height:"36px",borderRadius:"6px",background:"var(--accent)20",border:"1px solid var(--accent)44",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",fontWeight:"700",color:"var(--accent)",flexShrink:0}}>
+                    {(m.name||"?")[0].toUpperCase()}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:"12px",fontWeight:"700",color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.name}</div>
+                    <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",marginTop:"1px"}}>{m.email}</div>
+                  </div>
+                  <div style={{flexShrink:0,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"3px"}}>
+                    <Badge label={m.role} color={m.role==="owner"?"var(--amber)":m.role==="admin"?"var(--accent)":"var(--text3)"}/>
+                    <Badge label={m.status} color={m.status==="active"?"var(--green)":"var(--text4)"}/>
+                  </div>
+                  {m.id!==currentUser?.id&&(
+                    <button className="btn-danger" style={{flexShrink:0}} onClick={()=>{saveMembers(members.filter(x=>x.id!==m.id));showToast("✓ Member removed");}}>Remove</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {tab==="invite"&&(
+            <div>
+              <div className="edit-section-title">Invite Team Member</div>
+              <div style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"6px",padding:"12px",marginBottom:"14px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text3)",lineHeight:1.6}}>
+                Enter an email address — a unique invite link will be generated and copied to your clipboard. The recipient opens the link to create their account and join your org.
+              </div>
+              <div className="field-group">
+                <label className="field-label">Email address</label>
+                <input className="field-input" type="email" placeholder="colleague@firm.com" value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)}/>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Role</label>
+                <select className="field-select" value={inviteRole} onChange={e=>setInviteRole(e.target.value)}>
+                  {Object.entries(FCC_ROLES).filter(([k])=>k!=="owner").map(([k,v])=>(
+                    <option key={k} value={k}>{v.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{display:"flex",gap:"6px",padding:"8px 10px",background:"var(--amber)10",border:"1px solid var(--amber)33",borderRadius:"5px",marginBottom:"14px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--amber)"}}>
+                <span>ℹ</span>
+                <span>{members.length}/{plan.members} members used on {plan.label} plan</span>
+              </div>
+              <button className="btn-primary" style={{width:"100%"}} onClick={sendInvite}>
+                📋 Generate &amp; Copy Invite Link
+              </button>
+            </div>
+          )}
+
+          {tab==="billing"&&(
+            <div>
+              <div className="edit-section-title">Current Plan</div>
+              <div style={{background:"var(--surface)",border:`2px solid ${plan.color}`,borderRadius:"8px",padding:"16px",marginBottom:"16px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{fontSize:"18px",fontWeight:"900",color:plan.color}}>{plan.label}</div>
+                    <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",marginTop:"2px"}}>{plan.projectLimit===99?"Unlimited":plan.projectLimit} projects · {plan.members} members</div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:"22px",fontWeight:"900",color:plan.color}}>{plan.price===0?"Free":`KES ${plan.price.toLocaleString()}/mo`}</div>
+                  </div>
+                </div>
+              </div>
+
+              {Object.entries(FCC_PLANS).filter(([k])=>k!==(currentUser?.plan||"free")).map(([k,p])=>(
+                <div key={k} style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"6px",padding:"12px",marginBottom:"8px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{fontWeight:"700",color:"var(--text)",fontSize:"12px"}}>{p.label}</div>
+                    <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)"}}>{p.projectLimit===99?"Unlimited":p.projectLimit} projects · {p.members} members</div>
+                  </div>
+                  <button style={{background:p.color,border:"none",color:"#fff",padding:"7px 14px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.1em",borderRadius:"4px",cursor:"pointer"}}
+                    onClick={()=>{ if(p.price>0) openPaymentCheckout(k,p.price,currentUser?.email,setMpesaModal); }}>
+                    {p.price===0?"Downgrade":`📲 Lipa · KES ${p.price.toLocaleString()}/mo`}
+                  </button>
+                </div>
+              ))}
+
+              <div style={{marginTop:"12px",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",lineHeight:1.6}}>
+                🇰🇪 Lipa Na M-Pesa · Powered by Safaricom Daraja API<br/>
+                Paystack (cards + mobile money) also supported · Cancel anytime
+              </div>
+            </div>
+          )}
+
+          {tab==="settings"&&(
+            <div>
+              <div className="edit-section-title">Organisation Settings</div>
+              <div className="field-group">
+                <label className="field-label">Organisation name</label>
+                <input className="field-input" value={orgName} onChange={e=>setOrgName(e.target.value)}/>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Your name</label>
+                <input className="field-input" value={currentUser?.name||""} readOnly style={{opacity:0.6}}/>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Email</label>
+                <input className="field-input" value={currentUser?.email||""} readOnly style={{opacity:0.6}}/>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Role</label>
+                <input className="field-input" value={FCC_ROLES[currentUser?.role||"viewer"]?.label||"—"} readOnly style={{opacity:0.6}}/>
+              </div>
+              <button className="btn-primary" style={{marginTop:"8px"}} onClick={()=>{try{localStorage.setItem("fcc_org_name",orgName);}catch{}showToast("✓ Settings saved");}}>
+                Save Settings
+              </button>
+              <div style={{marginTop:"24px",paddingTop:"16px",borderTop:"1px solid var(--border)"}}>
+                <div className="edit-section-title" style={{color:"var(--red)"}}>Danger Zone</div>
+                <button className="btn-danger" style={{width:"100%",marginTop:"4px"}} onClick={()=>{
+                  try{localStorage.removeItem("fcc_user");}catch{}
+                  showToast("Signed out");
+                  setTimeout(()=>window.location.reload(),800);
+                }}>Sign Out</button>
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -3992,58 +4801,156 @@ function RegistrationScreen({onComplete}){
    Recipient opens the link and sees the full project.
    ═══════════════════════════════════════════════════════════ */
 function ShareSnapshotModal({proj,diaries,materials,provisions,onClose,showToast}){
-  const [copied,setCopied]=useState(false);
-  const [channel,setChannel]=useState(null);
+  const [copied,setCopied]   = useState(false);
+  const [emailCopied,setEmailCopied] = useState(false);
+  const [waPhone,setWaPhone] = useState("");
+  const [showWaInput,setShowWaInput] = useState(false);
 
-  const buildURL=()=>{
-    try{
-      const payload={
-        site:proj.site,phases:proj.phases,wps:proj.wps,
-        risks:proj.risks,snags:proj.snags,team:proj.team,
-        diaries:diaries||[],materials:materials||[],
+  // ── Build the snapshot URL ──────────────────────────────────────
+  const buildURL = () => {
+    try {
+      const payload = {
+        site:proj.site, phases:proj.phases, wps:proj.wps,
+        risks:proj.risks, snags:proj.snags, team:proj.team,
+        diaries:diaries||[], materials:materials||[],
         provisions:provisions||{},
-        _shared:true,_sharedAt:new Date().toISOString()
+        _shared:true, _sharedAt:new Date().toISOString()
       };
-      const encoded=encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(payload)))));
-      const base=window.location.href.split("?")[0];
+      const encoded = encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(payload)))));
+      const base = window.location.href.split("?")[0];
       return `${base}?snap=${encoded}`;
-    }catch(e){return window.location.href;}
+    } catch(e) { return window.location.href; }
   };
 
-  const url=buildURL();
+  const url = React.useMemo(buildURL, []);
+  const urlLen = url.length;
 
-  const copy=()=>{
-    navigator.clipboard.writeText(url).then(()=>{
+  // WhatsApp safe limit ~2000 chars for the full wa.me?text= URL
+  const WA_LIMIT = 1800;
+  const MAIL_LIMIT = 1900;
+  const urlOk  = urlLen <= WA_LIMIT;
+  const mailOk = urlLen <= MAIL_LIMIT;
+
+  // Short message (link only) always fits
+  const shortWaText  = `FCC snapshot — ${proj.site?.name||"Project"}:\n${url}`;
+  const longWaText   = `Hi 👋 Here's the latest project snapshot for *${proj.site?.name||"our site"}*. Open this link to view all phases, work packages, risks and diary entries:\n\n${url}`;
+  const waText       = urlOk ? longWaText : shortWaText;
+
+  const emailSubject = `Project Snapshot — ${proj.site?.name||"Site"}`;
+  const emailBodyFull = `Hi,
+
+I'm sharing the latest project snapshot from Field Command Centre.
+
+Project: ${proj.site?.name||""}
+Location: ${proj.site?.location||""}
+
+Open this link to view the full project data:
+${url}
+
+Regards`;
+
+  // ── Copy helpers ────────────────────────────────────────────────
+  const doCopy = (text, onDone) => {
+    const fallback = () => {
+      const ta = document.createElement("textarea");
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); } catch{}
+      document.body.removeChild(ta);
+      onDone();
+    };
+    if(navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(onDone).catch(fallback);
+    } else { fallback(); }
+  };
+
+  const copyLink = () => {
+    doCopy(url, () => {
       setCopied(true);
       showToast("✓ Link copied to clipboard");
       if(window.fccTrack) window.fccTrack("snapshot_shared",{channel:"clipboard"});
-      setTimeout(()=>setCopied(false),2500);
-    }).catch(()=>{
-      // Fallback for older browsers
-      const ta=document.createElement("textarea");
-      ta.value=url;document.body.appendChild(ta);ta.select();
-      document.execCommand("copy");document.body.removeChild(ta);
-      setCopied(true);showToast("✓ Link copied");setTimeout(()=>setCopied(false),2500);
+      setTimeout(() => setCopied(false), 2500);
     });
   };
 
-  const shareWhatsApp=()=>{
-    const text=`Here's the latest project snapshot for ${proj.site?.name||"our site"} — open this link to view all phases, work packages, risks and diary:\n\n${url}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`,"_blank");
-    if(window.fccTrack) window.fccTrack("snapshot_shared",{channel:"whatsapp"});
+  const copyEmailBody = () => {
+    doCopy(emailBodyFull, () => {
+      setEmailCopied(true);
+      showToast("✓ Email body copied — paste into your email client");
+      setTimeout(() => setEmailCopied(false), 3000);
+    });
   };
 
-  const shareEmail=()=>{
-    const sub=`Project Snapshot — ${proj.site?.name||"Site"}`;
-    const body=`Hi,\n\nI'm sharing the latest project snapshot from Field Command Centre.\n\nProject: ${proj.site?.name||""}\nLocation: ${proj.site?.location||""}\n\nOpen this link to view the full project data:\n${url}\n\nRegards`;
-    window.location.href=`mailto:?subject=${encodeURIComponent(sub)}&body=${encodeURIComponent(body)}`;
-    if(window.fccTrack) window.fccTrack("snapshot_shared",{channel:"email"});
+  // ── Share actions ───────────────────────────────────────────────
+
+  // Native share (mobile share sheet) — supports WhatsApp, Telegram, SMS etc.
+  const nativeShare = async () => {
+    if(!navigator.share) return false;
+    try {
+      await navigator.share({
+        title: `FCC Snapshot — ${proj.site?.name||"Project"}`,
+        text: `Field Command Centre project snapshot for ${proj.site?.name||"our site"}`,
+        url: url
+      });
+      if(window.fccTrack) window.fccTrack("snapshot_shared",{channel:"native"});
+      return true;
+    } catch(e) { return false; }
   };
+
+  // WhatsApp — direct to number if provided, otherwise open chat picker
+  const shareWhatsApp = () => {
+    const phone = waPhone.replace(/\D/g,"");
+    const num = phone.startsWith("254") ? phone : phone.startsWith("0") ? "254"+phone.slice(1) : phone ? "254"+phone : "";
+    const text = encodeURIComponent(waText);
+    const waUrl = num
+      ? `https://wa.me/${num}?text=${text}`
+      : `https://wa.me/?text=${text}`;
+
+    if(urlOk) {
+      window.open(waUrl, "_blank");
+      if(window.fccTrack) window.fccTrack("snapshot_shared",{channel:"whatsapp"});
+      showToast("✓ Opening WhatsApp…");
+    } else {
+      // URL too long for wa.me — copy link and open WhatsApp separately
+      doCopy(url, () => {
+        showToast("✓ Link copied — paste it into WhatsApp");
+        const waBase = num ? `https://wa.me/${num}` : "https://wa.me/";
+        window.open(waBase, "_blank");
+        if(window.fccTrack) window.fccTrack("snapshot_shared",{channel:"whatsapp_manual"});
+      });
+    }
+  };
+
+  // Email — try mailto first; fall back to copy if too long
+  const shareEmail = () => {
+    if(mailOk) {
+      const href = `mailto:?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBodyFull)}`;
+      window.location.href = href;
+      if(window.fccTrack) window.fccTrack("snapshot_shared",{channel:"email"});
+    } else {
+      // mailto body too long — copy email body instead
+      copyEmailBody();
+    }
+  };
+
+  // SMS — works well on mobile
+  const shareSMS = () => {
+    const smsBody = `FCC snapshot — ${proj.site?.name||"Project"}: ${url}`;
+    window.open(`sms:?body=${encodeURIComponent(smsBody)}`, "_blank");
+    if(window.fccTrack) window.fccTrack("snapshot_shared",{channel:"sms"});
+  };
+
+  const hasNativeShare = !!navigator.share;
+
+  // URL size indicator
+  const sizeKB = (urlLen/1024).toFixed(1);
+  const sizeColor = urlLen > 2500 ? "var(--red)" : urlLen > 1500 ? "var(--orange,#dd6b20)" : "var(--green)";
 
   return(
     <>
       <div className="share-modal-overlay" onClick={onClose}/>
       <div className="share-modal">
+
+        {/* Header */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"16px"}}>
           <div>
             <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"10px",color:"var(--accent)",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:"4px"}}>Share Project Snapshot</div>
@@ -4052,29 +4959,92 @@ function ShareSnapshotModal({proj,diaries,materials,provisions,onClose,showToast
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:"18px",padding:"2px"}}>✕</button>
         </div>
 
-        <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",marginBottom:"6px",textTransform:"uppercase",letterSpacing:"0.1em"}}>
-          Shareable Link — opens a full copy of your project data
+        {/* URL box + copy */}
+        <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",marginBottom:"6px",textTransform:"uppercase",letterSpacing:"0.1em",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span>Snapshot Link</span>
+          <span style={{color:sizeColor,fontSize:"8px"}}>{sizeKB} KB · {urlLen.toLocaleString()} chars</span>
         </div>
         <div className="share-url-box">{url}</div>
 
-        <button className="btn-primary" style={{width:"100%",marginBottom:"4px"}} onClick={copy}>
-          {copied?"✓ Copied!":"📋 Copy Link"}
+        <button className="btn-primary" style={{width:"100%",marginBottom:"14px"}} onClick={copyLink}>
+          {copied ? "✓ Copied!" : "📋 Copy Link"}
         </button>
 
-        <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.1em",margin:"16px 0 8px"}}>
-          Share directly via
-        </div>
-        <div className="share-channels">
-          <button className="share-channel-btn" onClick={shareWhatsApp}>
-            <span style={{fontSize:"16px"}}>💬</span> WhatsApp
-          </button>
-          <button className="share-channel-btn" onClick={shareEmail}>
-            <span style={{fontSize:"16px"}}>📧</span> Email
-          </button>
+        {/* Large project warning */}
+        {!urlOk && (
+          <div style={{background:"var(--orange,#dd6b20)15",border:"1px solid var(--orange,#dd6b20)44",borderRadius:"6px",padding:"9px 12px",marginBottom:"14px",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--orange,#dd6b20)",lineHeight:1.6}}>
+            ⚠ This project is large ({sizeKB} KB). WhatsApp and email links have a ~2 KB limit.
+            The app will copy the link to your clipboard so you can paste it manually.
+          </div>
+        )}
+
+        {/* Share channels */}
+        <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"8px"}}>
+          Share via
         </div>
 
-        <div style={{marginTop:"16px",background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"5px",padding:"10px 12px"}}>
-          <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"5px"}}>What's included in this snapshot</div>
+        {/* Native share (mobile) */}
+        {hasNativeShare && (
+          <button className="share-channel-btn" onClick={nativeShare}
+            style={{width:"100%",marginBottom:"8px",justifyContent:"center",padding:"11px"}}>
+            <span style={{fontSize:"16px"}}>📤</span>
+            <span>Share via Apps (WhatsApp · Telegram · SMS…)</span>
+          </button>
+        )}
+
+        <div className="share-channels">
+
+          {/* WhatsApp */}
+          <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
+            <button className="share-channel-btn" onClick={shareWhatsApp}
+              style={{justifyContent:"center",padding:"10px 8px"}}>
+              <span style={{fontSize:"16px"}}>💬</span>
+              <span>WhatsApp</span>
+              {!urlOk && <span style={{fontSize:"8px",color:"var(--orange,#dd6b20)",marginLeft:"2px"}}>+copy</span>}
+            </button>
+            <button onClick={()=>setShowWaInput(v=>!v)}
+              style={{background:"none",border:"none",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",cursor:"pointer",textAlign:"left",padding:"0 2px"}}>
+              {showWaInput ? "▲ hide number" : "▼ send to a number"}
+            </button>
+            {showWaInput && (
+              <input
+                type="tel"
+                placeholder="e.g. 0712 345 678"
+                value={waPhone}
+                onChange={e=>setWaPhone(e.target.value)}
+                style={{padding:"6px 8px",background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"4px",color:"var(--text)",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",outline:"none"}}
+              />
+            )}
+          </div>
+
+          {/* Email */}
+          <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
+            <button className="share-channel-btn" onClick={shareEmail}
+              style={{justifyContent:"center",padding:"10px 8px"}}>
+              <span style={{fontSize:"16px"}}>📧</span>
+              <span>{mailOk ? "Email" : "Copy Email"}</span>
+              {!mailOk && <span style={{fontSize:"8px",color:"var(--orange,#dd6b20)",marginLeft:"2px"}}>body</span>}
+            </button>
+            {!mailOk && (
+              <button onClick={copyEmailBody}
+                style={{background:"none",border:"none",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",cursor:"pointer",textAlign:"left",padding:"0 2px"}}>
+                {emailCopied ? "✓ copied!" : "▼ copy for webmail"}
+              </button>
+            )}
+          </div>
+
+        </div>
+
+        {/* SMS row */}
+        <button className="share-channel-btn" onClick={shareSMS}
+          style={{width:"100%",marginTop:"8px",justifyContent:"center",padding:"9px"}}>
+          <span style={{fontSize:"16px"}}>📱</span>
+          <span>SMS / Text Message</span>
+        </button>
+
+        {/* Included data chips */}
+        <div style={{marginTop:"14px",background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"5px",padding:"10px 12px"}}>
+          <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"5px"}}>What's included</div>
           <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
             {["Site Details","Phases","Work Packages","Risk Register","Snag List","Team","Site Diary","Materials","Provisions"].map(t=>(
               <span key={t} style={{background:"var(--accent-bg)",border:"1px solid var(--accent)22",color:"var(--accent)",padding:"2px 7px",borderRadius:"3px",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px"}}>{t}</span>
@@ -4086,6 +5056,342 @@ function ShareSnapshotModal({proj,diaries,materials,provisions,onClose,showToast
           ⚠ The link contains all project data. Only share with authorised team members.
         </div>
       </div>
+    {mpesaModal && (
+      <MpesaPayModal
+        plan={mpesaModal.plan}
+        amount={mpesaModal.amount}
+        userEmail={mpesaModal.userEmail||currentUser?.email}
+        onSuccess={(ref) => {
+          setMpesaModal(null);
+          try {
+            const u = JSON.parse(localStorage.getItem("fcc_user")||"null");
+            if(u){ u.plan = mpesaModal.plan; localStorage.setItem("fcc_user", JSON.stringify(u)); }
+          }catch{}
+          onClose();
+          window.location.href = window.location.pathname + "?upgraded=" + mpesaModal.plan;
+        }}
+        onClose={() => setMpesaModal(null)}
+      />
+    )}
+    </>
+  );
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// IN-APP TUTORIAL SYSTEM
+// ══════════════════════════════════════════════════════════════════
+
+const TUTORIALS = [
+  {
+    id: "welcome",
+    title: "Welcome to Field Command Center",
+    steps: [
+      {
+        title: "🏗  Your construction command centre",
+        body: "Field Command Center is a single HTML file that runs on any device — online or offline. Everything saves to localStorage instantly and syncs to Supabase in the background when you're connected.",
+        tip: null
+      },
+      {
+        title: "📋  9 modules in one file",
+        body: "Overview · Programme · Work Packages · Provisions · Materials · Site Diary · Risks & QA · Team · RE Report. Navigate between them using the top nav bar (desktop) or the bottom nav (mobile).",
+        tip: "On mobile, scroll the bottom nav left to see all modules."
+      },
+      {
+        title: "🎨  8 themes + A+ large text",
+        body: "Use the colour dots in the header to switch themes. Three outdoor-optimised modes (Solar ☀, Hi-Vis ⚡, Amber 🌙) are designed for direct sunlight and reading glasses. The A+ button bumps all text ~25%.",
+        tip: null
+      },
+      {
+        title: "🔗  Share your project instantly",
+        body: "Click the 🔗 Share button in the header. A full snapshot of your project is encoded into a URL. Recipients open the link — the project imports automatically as a read-only copy. Share via WhatsApp or Email directly.",
+        tip: "The URL can be long. Use a link shortener for WhatsApp."
+      },
+      {
+        title: "💾  Your data is always safe",
+        body: "Every change saves to localStorage immediately. If Supabase is configured, it syncs in the background. You can also export a full JSON backup at any time from ⚡ Integrations → Backup.",
+        tip: null
+      }
+    ]
+  },
+  {
+    id: "overview",
+    title: "Overview Dashboard",
+    steps: [
+      {
+        title: "◈  The command centre at a glance",
+        body: "The Overview shows your project headline — name, location, client, contract value, and overall progress arc. Five stat cards below surface the most critical numbers: phases, units, budget, risks, and days remaining.",
+        tip: null
+      },
+      {
+        title: "🔔  Live alert system",
+        body: "The bell icon in the header shows a count of active critical alerts — open critical risks, disputed variation orders, and materials with less than 1 week of stock. Click it to see the full alert panel.",
+        tip: "Critical risk cards pulse with an animated red border on the Risks page."
+      },
+      {
+        title: "📅  Gantt chart",
+        body: "The programme Gantt sits below the stat cards. Each phase bar shows its progress fill and TODAY marker. Phases are colour-coded by status: green = completed, blue = in-progress, amber = at-risk, red = blocked.",
+        tip: null
+      }
+    ]
+  },
+  {
+    id: "wbs",
+    title: "Work Packages (WBS)",
+    steps: [
+      {
+        title: "📦  Inline cell editing",
+        body: "Click any cell in the Work Packages table to edit it directly — no need to open a panel. Status, priority, assignee, and progress % are all editable inline.",
+        tip: null
+      },
+      {
+        title: "⌨  Keyboard navigation",
+        body: "While editing a cell: press Enter or ↓ to save and move to the next row, ↑ to go back, and Esc to cancel without saving. This lets you update an entire column rapidly without touching the mouse.",
+        tip: "The active row highlights in blue while a cell is being edited."
+      },
+      {
+        title: "🔍  Filter by phase",
+        body: "Use the phase chip buttons above the table to filter work packages to a single phase. The phase chips also show work-package counts and a mini progress bar.",
+        tip: null
+      }
+    ]
+  },
+  {
+    id: "diary",
+    title: "Site Diary",
+    steps: [
+      {
+        title: "📋  The legal record of your site",
+        body: "The site diary is the daily legal record required by Kenyan and standard contract law. Fill it in on-site before you leave for the day. Each entry records date, weather, temperature, visitor log, and safety observations.",
+        tip: null
+      },
+      {
+        title: "👷  Workforce registry",
+        body: "Log each workforce gang: trade, subcontractor, and headcount. Totals auto-sum across gangs. These records are auditable for contract compliance and RE report generation.",
+        tip: null
+      },
+      {
+        title: "📸  Photo capture",
+        body: "Attach photos from your device camera or gallery. Add captions per image. Photos are stored locally with the diary entry — no cloud upload required.",
+        tip: "Photos export with the RE Report for a complete record."
+      }
+    ]
+  },
+  {
+    id: "provisions",
+    title: "Provisions & Variations",
+    steps: [
+      {
+        title: "💰  Five ledgers in one panel",
+        body: "The Provisions module contains five sub-ledgers: Provisional Sums (PS), Prime Cost items (PC), Variation Orders (VO), Dayworks, and Contingency. Each has its own tracking workflow.",
+        tip: null
+      },
+      {
+        title: "📝  Raising a Variation Order",
+        body: "Open Provisions → Variations tab. Enter the VO ID, description, phase, amount, and who instructed it. Set the status to 'pending'. The QS and PM workflow advances through: pending → submitted → approved → rejected.",
+        tip: "Disputed VOs appear as critical alerts on the Overview dashboard."
+      },
+      {
+        title: "📊  Contingency tracking",
+        body: "The contingency card shows three figures: Allocated (total pot), Committed (formally instructed), and Expended (actually spent). Use this to track burn-down against your project risk buffer.",
+        tip: null
+      }
+    ]
+  }
+];
+
+function TutorialSystem({ currentView, isFirstVisit, onDismiss }) {
+  const [open, setOpen] = useState(false);
+  const [activeTutorial, setActiveTutorial] = useState(null);
+  const [step, setStep] = useState(0);
+  const [seen, setSeen] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("fcc_tutorials_seen")) || {}; } catch { return {}; }
+  });
+
+  const markSeen = (id) => {
+    const next = { ...seen, [id]: true };
+    setSeen(next);
+    try { localStorage.setItem("fcc_tutorials_seen", JSON.stringify(next)); } catch {}
+  };
+
+  // Auto-open welcome on very first visit
+  useEffect(() => {
+    if (isFirstVisit && !seen["welcome"]) {
+      setTimeout(() => {
+        setActiveTutorial(TUTORIALS[0]);
+        setStep(0);
+        setOpen(true);
+      }, 800);
+    }
+  }, [isFirstVisit]);
+
+  // Auto-suggest tutorial when entering a view for first time
+  useEffect(() => {
+    const viewTut = TUTORIALS.find(t => t.id === currentView);
+    if (viewTut && !seen[currentView] && !open) {
+      // Don't auto-open, just show a gentle prompt via a timeout
+    }
+  }, [currentView]);
+
+  const openTutorial = (tut) => {
+    setActiveTutorial(tut);
+    setStep(0);
+    setOpen(true);
+  };
+
+  const close = () => {
+    if (activeTutorial) markSeen(activeTutorial.id);
+    setOpen(false);
+    setActiveTutorial(null);
+    setStep(0);
+  };
+
+  const next = () => {
+    if (step < activeTutorial.steps.length - 1) {
+      setStep(s => s + 1);
+    } else {
+      close();
+    }
+  };
+
+  const prev = () => { if (step > 0) setStep(s => s - 1); };
+
+  const currentStep = activeTutorial ? activeTutorial.steps[step] : null;
+
+  return (
+    <>
+      {/* Tutorial launcher button — bottom right */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        title="Tutorials & Help"
+        style={{
+          position: "fixed", bottom: "88px", right: "16px", zIndex: 400,
+          width: "44px", height: "44px", borderRadius: "50%",
+          background: "var(--accent)", border: "none", color: "#fff",
+          fontSize: "18px", cursor: "pointer", boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          transition: "all 0.2s"
+        }}
+        onMouseEnter={e => e.currentTarget.style.transform = "scale(1.1)"}
+        onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+      >
+        ?
+      </button>
+
+      {/* Tutorial picker drawer */}
+      {open && !activeTutorial && (
+        <>
+          <div onClick={() => setOpen(false)} style={{position:"fixed",inset:0,zIndex:401}}/>
+          <div style={{
+            position: "fixed", bottom: "144px", right: "16px", zIndex: 402,
+            background: "var(--modal-bg)", border: "1px solid var(--border)",
+            borderRadius: "10px", padding: "14px", width: "260px",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.2)", animation: "fadeUp 0.15s ease"
+          }}>
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--accent)",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:"10px"}}>
+              Tutorials & Help
+            </div>
+            {TUTORIALS.map(tut => (
+              <button key={tut.id} onClick={() => openTutorial(tut)} style={{
+                width:"100%",background:seen[tut.id]?"var(--bg)":"var(--accent)10",
+                border:"1px solid " + (seen[tut.id]?"var(--border)":"var(--accent)44"),
+                borderRadius:"5px",padding:"9px 12px",marginBottom:"6px",
+                cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",
+                transition:"all 0.15s"
+              }}>
+                <div style={{textAlign:"left"}}>
+                  <div style={{fontSize:"11px",fontWeight:"700",color:"var(--text)"}}>{tut.title}</div>
+                  <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",marginTop:"2px"}}>{tut.steps.length} steps</div>
+                </div>
+                {seen[tut.id] && <span style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--green)"}}>✓ done</span>}
+              </button>
+            ))}
+            <div style={{marginTop:"8px",borderTop:"1px solid var(--border)",paddingTop:"8px",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",lineHeight:1.5}}>
+              Press ? anytime to reopen this menu
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Active tutorial modal */}
+      {open && activeTutorial && currentStep && (
+        <>
+          <div onClick={close} style={{position:"fixed",inset:0,background:"var(--overlay)",zIndex:450,animation:"fadeIn 0.2s"}}/>
+          <div style={{
+            position:"fixed",bottom:"100px",right:"16px",
+            width:"min(340px,calc(100vw - 32px))",
+            background:"var(--modal-bg)",border:"1px solid var(--border)",
+            borderRadius:"12px",zIndex:451,
+            boxShadow:"0 16px 48px rgba(0,0,0,0.3)",animation:"fadeUp 0.2s ease",
+            overflow:"hidden"
+          }}>
+            {/* Progress bar */}
+            <div style={{height:"3px",background:"var(--border)"}}>
+              <div style={{height:"100%",width:`${((step+1)/activeTutorial.steps.length)*100}%`,background:"var(--accent)",transition:"width 0.3s ease"}}/>
+            </div>
+
+            <div style={{padding:"16px 18px"}}>
+              {/* Header */}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>
+                <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--accent)",textTransform:"uppercase",letterSpacing:"0.12em"}}>
+                  {activeTutorial.title}
+                </div>
+                <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+                  <span style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)"}}>
+                    {step+1}/{activeTutorial.steps.length}
+                  </span>
+                  <button onClick={close} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:"14px",padding:"0",lineHeight:1}}>✕</button>
+                </div>
+              </div>
+
+              {/* Step content */}
+              <div style={{fontSize:"14px",fontWeight:"800",color:"var(--text)",marginBottom:"8px",lineHeight:1.3}}>
+                {currentStep.title}
+              </div>
+              <div style={{fontSize:"11px",color:"var(--text2)",lineHeight:1.6,marginBottom:currentStep.tip?"10px":"0"}}>
+                {currentStep.body}
+              </div>
+
+              {/* Tip callout */}
+              {currentStep.tip && (
+                <div style={{
+                  background:"var(--amber)10",border:"1px solid var(--amber)33",
+                  borderRadius:"5px",padding:"8px 10px",
+                  display:"flex",gap:"6px",alignItems:"flex-start"
+                }}>
+                  <span style={{fontSize:"12px",flexShrink:0}}>💡</span>
+                  <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8.5px",color:"var(--amber)",lineHeight:1.5}}>
+                    {currentStep.tip}
+                  </div>
+                </div>
+              )}
+
+              {/* Navigation */}
+              <div style={{display:"flex",gap:"8px",marginTop:"14px",alignItems:"center"}}>
+                {step > 0 ? (
+                  <button onClick={prev} className="btn-ghost" style={{fontSize:"9px",padding:"7px 12px"}}>← Back</button>
+                ) : (
+                  <button onClick={close} className="btn-ghost" style={{fontSize:"9px",padding:"7px 12px"}}>Skip</button>
+                )}
+                <button onClick={next} className="btn-primary" style={{flex:1,fontSize:"9px",padding:"8px"}}>
+                  {step < activeTutorial.steps.length - 1 ? "Next →" : "Got it ✓"}
+                </button>
+              </div>
+
+              {/* Dots */}
+              <div style={{display:"flex",gap:"5px",justifyContent:"center",marginTop:"10px"}}>
+                {activeTutorial.steps.map((_,i) => (
+                  <div key={i} onClick={() => setStep(i)} style={{
+                    width:"6px",height:"6px",borderRadius:"50%",cursor:"pointer",
+                    background:i===step?"var(--accent)":"var(--border)",
+                    transition:"background 0.2s"
+                  }}/>
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 }
@@ -4094,38 +5400,71 @@ function App(){
   const load=key=>{try{const v=localStorage.getItem(key);return v?JSON.parse(v):null;}catch{return null;}};
   const persist=(key,val)=>{try{localStorage.setItem(key,JSON.stringify(val));}catch{}};
 
+  // ── OJOLA SEED GUARD — clears any stale Rongo/other cached data and forces
+  //    fresh Ojola project on first load of this file. Change SEED_VER to re-seed.
+  //    SKIP if a ?snap= link is being loaded — recipient's storage must not be wiped.
+  const SEED_VER="ojola-v1";
+  const _isSnapLoad=!!window.__FCC_SNAPSHOT__;
+  if(!_isSnapLoad && load("ahp_seed")!==SEED_VER){
+    ["ahp_projects","ahp_activeProject","ahp_seenApp","ahp_theme","ahp_large"].forEach(k=>{
+      try{localStorage.removeItem(k);}catch{}
+    });
+    persist("ahp_seed",SEED_VER);
+    persist("ahp_projects",[RONGO_DATA]);
+    persist("ahp_activeProject",0);
+  }
+
   // ── Registration state ─────────────────────────────────────────────────────
-  const [showRegister,setShowRegister]=useState(()=>!load("ahp_registered"));
-  const [currentUser,setCurrentUser]=useState(()=>load("ahp_registered")||{name:"",email:""});
+  // ── Auth state ─────────────────────────────────────────────────────────────
+  // NOTE: If a snapshot is incoming (?snap=), we bypass auth + landing synchronously
+  //       so the recipient lands directly on the shared project — no blank screen.
+  const [showAuth,setShowAuth]=useState(()=>{
+    if(window.__FCC_SNAPSHOT__) return false; // snap links skip auth gate
+    try{return !JSON.parse(localStorage.getItem("fcc_user"));}catch{return true;}
+  });
+  const [currentUser,setCurrentUser]=useState(()=>{ try{return JSON.parse(localStorage.getItem("fcc_user"))||null;}catch{return null;} });
+  const [showOrgPanel,setShowOrgPanel]=useState(false);
+  const [upgradedBanner,setUpgradedBanner]=useState(()=>new URLSearchParams(window.location.search).get("upgraded")||null);
+  const [isFirstVisit]=useState(()=>{ try{return !localStorage.getItem("fcc_tutorials_seen");}catch{return true;} });
   const [showShare,setShowShare]=useState(false);
 
-  // ── Handle incoming snapshot from URL ──────────────────────────────────────
-  useEffect(()=>{
-    if(window.__FCC_SNAPSHOT__){
-      try{
-        const snap=window.__FCC_SNAPSHOT__;
-        // Store as a new project named "[Shared] ..."
-        const snapProject={
-          ...snap,
-          site:{...snap.site,name:`[Shared] ${snap.site?.name||"Project"}`},
-        };
-        const existing=load("ahp_projects")||[RONGO_DATA];
-        const withSnap=[...existing,snapProject];
-        persist("ahp_projects",withSnap);
-        persist("ahp_activeProject",withSnap.length-1);
-        window.__FCC_SNAPSHOT__=null;
-        // Clean the URL
-        window.history.replaceState({},"",window.location.pathname);
-        if(window.fccTrack) window.fccTrack("snapshot_received",{project:snap.site?.name||""});
-      }catch(e){}
-    }
-  },[]);
+  // (snapshot toast fires after toast state is declared below)
 
   const [theme,setTheme]     = useState(()=>load("ahp_theme")||"light");
   const [largeText,setLargeText] = useState(()=>load("ahp_large")||false);
-  const [showLanding,setShowLanding] = useState(()=>load("ahp_seenApp")!==true);
-  const [projects,setProjects] = useState(()=>load("ahp_projects")||[RONGO_DATA]);
-  const [activeProject,setActiveProject] = useState(()=>load("ahp_activeProject")||0);
+  const [showLanding,setShowLanding] = useState(()=>{
+    if(window.__FCC_SNAPSHOT__) return false; // snap links skip landing page
+    return load("ahp_seenApp")!==true;
+  });
+  const [projects,setProjects] = useState(()=>{
+    if(window.__FCC_SNAPSHOT__){
+      try{
+        const snap=window.__FCC_SNAPSHOT__;
+        const snapProject={...snap, site:{...snap.site, name:`[Shared] ${snap.site?.name||"Project"}`}, _isSnapshot:true};
+        const existing=load("ahp_projects")||[RONGO_DATA];
+        // Avoid duplicating if already saved (e.g. hot reload)
+        const alreadyIn=existing.some(p=>p._isSnapshot && p.site?.name===snapProject.site?.name);
+        const merged=alreadyIn?existing:[...existing,snapProject];
+        persist("ahp_projects",merged);
+        persist("ahp_activeProject",merged.length-1);
+        persist("ahp_seenApp",true);
+        window.history.replaceState({},"",window.location.pathname);
+        // stash name for toast — fired after render
+        window.__FCC_SNAP_NAME__=snap.site?.name||"Project";
+        window.__FCC_SNAPSHOT__=null;
+        return merged;
+      }catch(e){ console.warn("FCC: snapshot parse failed",e); }
+    }
+    return load("ahp_projects")||[RONGO_DATA];
+  });
+  const [activeProject,setActiveProject] = useState(()=>{
+    // If we just loaded a snapshot, point to the last project (the snap)
+    if(window.__FCC_SNAP_NAME__ !== undefined){
+      const all=load("ahp_projects")||[RONGO_DATA];
+      return all.length-1;
+    }
+    return load("ahp_activeProject")||0;
+  });
   const [showNewProject,setShowNewProject] = useState(false);
   const [showProjectPicker,setShowProjectPicker] = useState(false);
 
@@ -4149,12 +5488,14 @@ function App(){
     p[activeProject]={...p[activeProject],diaries,materials,provisions};
     setProjects(p);
     persist("ahp_projects",p);
+    sbSaveProject(currentUser?.id, p[activeProject]);
   },[diaries,materials,provisions]);
 
   const saveProj=(d)=>{
     const p=[...projects];
     p[activeProject]={...p[activeProject],...d};
     setProjects(p);persist("ahp_projects",p);
+    sbSaveProject(currentUser?.id, p[activeProject]);
   };
 
   useEffect(()=>{document.documentElement.setAttribute("data-theme",theme);persist("ahp_theme",theme);},[theme]);
@@ -4213,6 +5554,16 @@ function App(){
 
   useEffect(()=>{const t=setInterval(()=>setTime(new Date()),1000);return()=>clearInterval(t);},[]);
   const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
+
+  // ── Snapshot toast — notify recipient that shared project loaded ────────────
+  useEffect(()=>{
+    if(window.__FCC_SNAP_NAME__!==undefined){
+      const name=window.__FCC_SNAP_NAME__;
+      window.__FCC_SNAP_NAME__=undefined;
+      setTimeout(()=>showToast(`✓ Shared snapshot loaded — ${name}`),400);
+      if(window.fccTrack) window.fccTrack("snapshot_received",{project:name});
+    }
+  },[]);
 
   const handleSave=d=>{saveProj(d);setShowEdit(false);showToast("✓ Dashboard updated");};
 
@@ -4298,12 +5649,12 @@ function App(){
   ];
 
   // ── If landing page is shown, render it and stop ──
-  // ── Gate 1: Registration (first ever launch) ──
-  if(showRegister){
-    return <RegistrationScreen onComplete={user=>{
+  // ── Gate 1: Auth ──
+  if(showAuth){
+    return <AuthScreen onAuth={user=>{
       setCurrentUser(user);
-      setShowRegister(false);
-      if(window.fccTrack) window.fccTrack("app_first_launch",{});
+      setShowAuth(false);
+      if(window.fccTrack) window.fccTrack("app_first_launch",{user:user.email});
     }}/>;
   }
 
@@ -4315,10 +5666,16 @@ function App(){
   return(
     <div style={{minHeight:"100vh",background:"var(--bg)",fontFamily:"'Barlow',sans-serif",color:"var(--text)"}}>
       {toast&&<div className="toast">{toast}</div>}
+      <TutorialSystem currentView={view} isFirstVisit={isFirstVisit} onDismiss={()=>{}}/>
+      {upgradedBanner&&<div style={{position:"fixed",top:"62px",left:"50%",transform:"translateX(-50%)",background:"var(--accent)",color:"#fff",padding:"10px 20px",borderRadius:"6px",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",fontWeight:"700",zIndex:999,animation:"fadeUp 0.2s ease",boxShadow:"0 4px 16px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:"10px"}}>
+        ✓ Upgraded to {upgradedBanner.charAt(0).toUpperCase()+upgradedBanner.slice(1)} plan
+        <button onClick={()=>setUpgradedBanner(null)} style={{background:"none",border:"none",color:"#fff",cursor:"pointer",fontSize:"14px",padding:"0 0 0 4px"}}>✕</button>
+      </div>}
       {showPin&&<PinLock onUnlock={()=>{setShowPin(false);setShowEdit(true);}}/>}
       {showEdit&&<EditPanel data={proj} onSave={handleSave} onClose={()=>setShowEdit(false)}/>}
       {showIntegration&&<IntegrationHub proj={proj} onImport={handleImport} onClose={()=>setShowIntegration(false)} showToast={showToast}/>}
       {showShare&&<ShareSnapshotModal proj={proj} diaries={diaries} materials={materials} provisions={provisions} onClose={()=>setShowShare(false)} showToast={showToast}/>}
+      {showOrgPanel&&<OrgPanel currentUser={currentUser} onClose={()=>setShowOrgPanel(false)} onUpgrade={plan=>openStripeCheckout(plan,currentUser?.email)} showToast={showToast}/>}
       {showNewProject&&<NewProjectWizard onCreate={p=>{const np=[...projects,p];setProjects(np);persist("ahp_projects",np);setActiveProject(np.length-1);setShowNewProject(false);showToast("✓ New project created");}} onCancel={()=>setShowNewProject(false)}/>}
 
       {/* PROJECT PICKER */}
@@ -4333,14 +5690,26 @@ function App(){
                 <div style={{fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",marginTop:"2px"}}>{p.site?.location||"—"}</div>
               </button>
             ))}
-            <button className="btn-add" onClick={()=>{setShowProjectPicker(false);setShowNewProject(true);}}>+ New Project</button>
+            {(()=>{
+              const planLimit=FCC_PLANS[currentUser?.plan||"free"].projectLimit;
+              const atLimit=projects.length>=planLimit;
+              return(
+                <button className="btn-add"
+                  style={{opacity:atLimit?0.5:1,cursor:atLimit?"not-allowed":"pointer"}}
+                  onClick={()=>{
+                    if(atLimit){showToast(`⚠ Plan limit: ${planLimit} project${planLimit!==1?"s":""} on ${FCC_PLANS[currentUser?.plan||"free"].label} plan — upgrade to add more`);return;}
+                    setShowProjectPicker(false);setShowNewProject(true);
+                  }}>
+                  + New Project ({projects.length}/{planLimit===99?"∞":planLimit})
+                </button>
+              );
+            })()}
           </div>
         </>
       )}
 
       {/* HEADER */}
-      <header style={{borderBottom:"1px solid var(--border)",padding:"0 16px",background:"var(--header-bg)",display:"flex",alignItems:"center",gap:"8px",height:"54px",position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
-        <button onClick={()=>setShowProjectPicker(s=>!s)} style={{display:"flex",alignItems:"center",gap:"10px",background:"none",border:"none",cursor:"pointer",paddingRight:"12px",borderRight:"1px solid var(--border)",marginRight:"4px",flexShrink:0,minWidth:0}}>
+      <header style={{borderBottom:"1px solid var(--border)",padding:"0 16px",background:"var(--header-bg)",display:"flex",alignItems:"center",gap:"8px",height:"54px",position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",overflow:"hidden",minWidth:0}}>        <button onClick={()=>setShowProjectPicker(s=>!s)} style={{display:"flex",alignItems:"center",gap:"10px",background:"none",border:"none",cursor:"pointer",paddingRight:"12px",borderRight:"1px solid var(--border)",marginRight:"4px",flexShrink:0,minWidth:0}}>
           <div style={{display:"flex",flexDirection:"column",gap:"2px",flexShrink:0}}>
             <div style={{display:"flex",gap:"2px"}}>{["#E53E3E","#D69E2E","#38A169"].map((c,j)=><div key={j} style={{width:"7px",height:"7px",background:c,borderRadius:"1px",opacity:0.8}}/>)}</div>
             <div style={{display:"flex",gap:"2px"}}>{["#3182CE","#805AD5","#D69E2E"].map((c,j)=><div key={j} style={{width:"7px",height:"7px",background:c,borderRadius:"1px",opacity:0.8}}/>)}</div>
@@ -4422,13 +5791,27 @@ function App(){
             )}
           </div>
 
+          {/* USER PILL */}
+          <button onClick={()=>setShowOrgPanel(true)} title="Org & account settings"
+            style={{display:"flex",alignItems:"center",gap:"6px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"20px",padding:"4px 10px 4px 4px",cursor:"pointer",flexShrink:0,transition:"all 0.15s"}}
+            onMouseEnter={e=>e.currentTarget.style.borderColor="var(--accent)"}
+            onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
+            <div style={{width:"26px",height:"26px",borderRadius:"50%",background:"var(--accent)20",border:"2px solid var(--accent)55",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",fontWeight:"700",color:"var(--accent)",flexShrink:0}}>
+              {(currentUser?.name||"G")[0].toUpperCase()}
+            </div>
+            <div className="hide-mobile" style={{textAlign:"left"}}>
+              <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",color:"var(--text)",lineHeight:1}}>{(currentUser?.name||"Guest").split(" ")[0]}</div>
+              <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:FCC_PLANS[currentUser?.plan||"free"]?.color||"var(--text4)",lineHeight:1,marginTop:"1px"}}>{FCC_PLANS[currentUser?.plan||"free"]?.label||"Free"}</div>
+            </div>
+          </button>
+
           <button onClick={()=>setShowPin(true)} style={{background:"var(--amber)15",border:"1px solid var(--amber)44",color:"var(--amber)",padding:"6px 10px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.1em",borderRadius:"4px",cursor:"pointer"}}>
             ✏
           </button>
         </div>
       </header>
 
-      <main style={{padding:"16px",maxWidth:"1440px",margin:"0 auto",paddingBottom:"80px"}}>
+      <main style={{padding:"16px",maxWidth:"1440px",margin:"0 auto",paddingBottom:"calc(80px + env(safe-area-inset-bottom,0px))"}}>
 
         {/* ── OVERVIEW ── */}
         {view==="overview"&&(
