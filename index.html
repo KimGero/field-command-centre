@@ -4007,8 +4007,8 @@ const pushSchedule = async (token, wps) => {
       - Copy your Public Key from Settings → API
    ────────────────────────────────────────────────────────────── */
 const FCC_CONFIG = {
-  supabaseUrl:     "",   // e.g. "https://xxxx.supabase.co"
-  supabaseKey:     "",   // anon/public key
+  supabaseUrl:     "https://tdswjztqcwgpvmwqczjl.supabase.co",   // e.g. "https://xxxx.supabase.co"
+  supabaseKey:     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkc3dqenRxY3dncHZtd3FjempsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwOTMzMTIsImV4cCI6MjA4ODY2OTMxMn0.c7vEV9QmpetxxENUyB5ybE55kv_2vS7JjxPUSt1Rzu0",   // anon/public key
 
   // ── M-Pesa Daraja (primary Kenya payment) ──────────────────────
   mpesaRelayUrl:   "",   // URL of your /mpesa-relay Supabase Edge Function
@@ -4017,7 +4017,7 @@ const FCC_CONFIG = {
   mpesaEnv:        "sandbox",  // "sandbox" | "live"
 
   // ── Paystack fallback (cards + M-Pesa via Paystack) ────────────
-  paystackPublicKey: "",  // pk_test_... or pk_live_... from paystack.com
+  paystackPublicKey: "pk_test_63e1fcfd734d117a23475494ea27c8499d1eb634",  // pk_test_... or pk_live_... from paystack.com
 };
 
 /* ── 2. PLANS ────────────────────────────────────────────────── */
