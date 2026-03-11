@@ -3,13 +3,15 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
-  <title>Ojola Command Centre v4</title>
+  <title>Ojola Field Command Centre v11</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700;800;900&family=Barlow:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- Supabase JS v2 — real-time sync + presence -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="https://js.paystack.co/v1/inline.js"></script>
 
   <!-- ══════════════════════════════════════════════
@@ -32,20 +34,112 @@
     };
   </script>
 
-  <!-- ══════════════════════════════════════════════
-       SHARE SNAPSHOT — reads ?snap= from URL on load
-       and auto-imports project data for the recipient
-  ══════════════════════════════════════════════ -->
+  <!-- PWA Manifest for Android add-to-homescreen + full-screen -->
+  <link rel="manifest" href="data:application/manifest+json,{
+    %22name%22:%22Ojola%20Command%20Centre%22,
+    %22short_name%22:%22Ojola%22,
+    %22start_url%22:%22.%22,
+    %22display%22:%22standalone%22,
+    %22background_color%22:%22%23060612%22,
+    %22theme_color%22:%22%234A9EFF%22,
+    %22icons%22:[{%22src%22:%22data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2096%2096'%3E%3Crect%20width='96'%20height='96'%20rx='18'%20fill='%234A9EFF'/%3E%3Ctext%20x='48'%20y='68'%20font-size='60'%20text-anchor='middle'%20font-family='monospace'%20fill='white'%3E⌘%3C/text%3E%3C/svg%3E%22,%22sizes%22:%22any%22,%22type%22:%22image/svg+xml%22}]
+  }"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Ojola CC"/>
+  <meta name="theme-color" content="#080812"/>
+
+  <!-- Inline Service Worker for offline caching -->
+  <script>
+  (function(){
+    if(!('serviceWorker' in navigator)) return;
+    // Build an inline SW that caches this page + CDN assets
+    const SW_SRC = `
+const CACHE_NAME = 'ojola-v9';
+const SELF_URL = self.location.href.split('?')[0];
+
+// On install: cache the app shell
+self.addEventListener('install', e => {
+  e.waitUntil(
+    caches.open(CACHE_NAME).then(cache => {
+      return cache.addAll([SELF_URL]).catch(()=>{});
+    })
+  );
+  self.skipWaiting();
+});
+
+// On activate: clean old caches
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))
+    )
+  );
+  self.clients.claim();
+});
+
+// On fetch: network-first with offline fallback
+self.addEventListener('fetch', e => {
+  if(e.request.method !== 'GET') return;
+  e.respondWith(
+    fetch(e.request)
+      .then(res => {
+        // Cache successful responses for this origin
+        if(res.ok && (e.request.url.startsWith(self.location.origin) || e.request.url.includes('cdnjs.cloudflare.com'))) {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
+        }
+        return res;
+      })
+      .catch(() => caches.match(e.request))
+  );
+});
+    `;
+    try {
+      const blob = new Blob([SW_SRC], {type:'text/javascript'});
+      const swUrl = URL.createObjectURL(blob);
+      navigator.serviceWorker.register(swUrl, {scope:'./'})
+        .then(reg => {
+          reg.addEventListener('updatefound', () => {
+            const nw = reg.installing;
+            nw && nw.addEventListener('statechange', () => {
+              if(nw.statechange === 'installed' && navigator.serviceWorker.controller) {
+                console.log('[Ojola SW] Update available — reload to apply');
+              }
+            });
+          });
+          // Expose sync trigger
+          window.__ojolaSWRegistration = reg;
+        })
+        .catch(e => console.warn('[Ojola SW] Registration skipped:', e.message));
+    } catch(e) { /* blob URL SW not supported in this context */ }
+  })();
+  </script>
   <script>
     (function(){
       try{
         const params=new URLSearchParams(window.location.search);
+        // Legacy ?snap= (full base64 payload — still supported)
         const snap=params.get('snap');
         if(snap){
-          const decoded=JSON.parse(atob(decodeURIComponent(snap)));
-          window.__FCC_SNAPSHOT__=decoded;
+          try{
+            const decoded=JSON.parse(atob(decodeURIComponent(snap)));
+            window.__FCC_SNAPSHOT__=decoded;
+          }catch(e){ /* bad legacy snap — ignore */ }
         }
-      }catch(e){ /* bad snapshot — ignore */ }
+        // New ?share=<id> — fetch from Supabase before React boots
+        const shareId=params.get('share');
+        if(shareId && !snap){
+          window.__FCC_SHARE_ID__ = shareId;
+          // Show a loading overlay until the async fetch resolves
+          const overlay=document.createElement('div');
+          overlay.id='fcc-share-loader';
+          overlay.style.cssText='position:fixed;inset:0;background:#0f172a;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;font-family:monospace;color:#94a3b8;gap:16px;';
+          overlay.innerHTML='<div style="font-size:32px;animation:spin 1s linear infinite">⌘</div><div style="font-size:11px;letter-spacing:0.15em;text-transform:uppercase">Loading shared project…</div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>';
+          document.body.appendChild(overlay);
+        }
+      }catch(e){ /* ignore */ }
     })();
   </script>
   <style>
@@ -216,6 +310,34 @@
     .mob-nav-btn.active{color:var(--accent);}
     .mob-nav-icon{font-size:18px;line-height:1;}
 
+    /* ── MOBILE DRAWER MENU ── */
+    .mob-drawer-overlay{position:fixed;inset:0;background:var(--overlay);z-index:350;animation:fadeIn 0.18s ease;}
+    .mob-drawer{position:fixed;top:0;right:0;bottom:0;width:min(300px,88vw);background:var(--modal-bg);border-left:1px solid var(--border);z-index:351;animation:slideIn 0.22s ease;overflow-y:auto;display:flex;flex-direction:column;box-shadow:-8px 0 32px rgba(0,0,0,0.18);}
+    .mob-drawer-header{padding:16px 18px 12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:var(--modal-bg);z-index:1;}
+    .mob-drawer-title{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:0.14em;}
+    .mob-drawer-close{background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;padding:4px;line-height:1;}
+    .mob-drawer-body{padding:14px 18px;flex:1;}
+    .mob-drawer-section{margin-bottom:18px;}
+    .mob-drawer-section-label{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--text4);text-transform:uppercase;letter-spacing:0.14em;margin-bottom:8px;}
+    .mob-drawer-btn{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:11px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:7px;transition:all 0.15s;text-align:left;}
+    .mob-drawer-btn:hover{border-color:var(--accent);color:var(--accent);}
+    .mob-drawer-btn.admin{border-color:var(--amber)44;background:var(--amber)08;color:var(--amber);}
+    .mob-drawer-btn.sync-online{border-color:var(--green)44;background:var(--green)08;color:var(--green);}
+    .mob-drawer-btn.sync-offline{border-color:var(--red)44;background:var(--red)08;color:var(--red);}
+    /* Mobile sync badge always visible */
+    .sync-badge{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;border:1px solid var(--border);background:var(--bg);cursor:pointer;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text3);transition:all 0.15s;}
+    .sync-badge:hover{border-color:var(--accent);color:var(--text);}
+    /* Theme row for drawer */
+    .theme-row{display:flex;flex-wrap:wrap;gap:8px;padding:8px 0;}
+    /* Hamburger button - always visible on mobile */
+    .mob-menu-btn{display:none;background:none;border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:6px;cursor:pointer;font-size:16px;line-height:1;flex-shrink:0;transition:all 0.15s;}
+    .mob-menu-btn:hover{border-color:var(--accent);color:var(--accent);}
+    @media(max-width:768px){.mob-menu-btn{display:flex;align-items:center;justify-content:center;}}
+
+    /* Mobile sync pill always shown in header */
+    .mob-sync-pill{display:none;align-items:center;gap:5px;padding:4px 8px;border-radius:12px;border:1px solid var(--border);background:var(--bg);font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--text3);flex-shrink:0;}
+    @media(max-width:768px){.mob-sync-pill{display:flex;}}
+
     /* RESPONSIVE */
     /* ── GLOBAL ANDROID/MOBILE GUARDS ── */
     *{-webkit-tap-highlight-color:transparent;}
@@ -226,6 +348,9 @@
     @media(max-width:768px){
       .mobile-nav{display:block;}
       .desktop-nav{display:none !important;}
+      /* Larger, more comfortable bottom nav items */
+      .mob-nav-btn{padding:11px 14px;min-width:60px;font-size:8.5px;}
+      .mob-nav-icon{font-size:19px;}
       /* Safe-area-aware bottom padding (Android nav bar + bottom nav) */
       main{padding:12px 12px calc(64px + env(safe-area-inset-bottom,0px)) 12px !important;}
       .page-grid-2{grid-template-columns:1fr !important;}
@@ -1239,6 +1364,7 @@ const RONGO_PROVISIONS = {
 
 // ── BLANK PROJECT TEMPLATE ────────────────────────────────────────────────────
 const blankProject = (name, location) => ({
+  id: "proj-" + Math.random().toString(36).slice(2,10),
   site:{ name, location, units:0, blocks:0, land:"", contractor:"", client:"", PMC:"",
     startDate:today(), targetCompletion:"", contractValue:0 },
   phases:[
@@ -1256,6 +1382,7 @@ const blankProject = (name, location) => ({
 
 // ── DEFAULT DATA (Kisumu Ojola Ultra-Luxury 3BR) ──────────────────────────────
 const RONGO_DATA = {
+  id: "rongo-ojola-v1",
   site:{
     name:"Ojola Ultra-Luxury Residence",
     location:"Kisumu Ojola, Kisumu County, Kenya",
@@ -2349,12 +2476,34 @@ function MaterialsView({materials,setMaterials}){
 }
 
 // ── DIARY VIEW ────────────────────────────────────────────────────────────────
-function DiaryView({diaries,setDiaries,team}){
+function DiaryView({diaries,setDiaries,team,currentUserId}){
   const [showAdd,setShowAdd]=useState(false);
   const [filterMonth,setFilterMonth]=useState("all");
   const [form,setForm]=useState(null);
   const months=[...new Set(diaries.map(d=>d.date.slice(0,7)))].sort().reverse();
   const filtered=filterMonth==="all"?[...diaries].sort((a,b)=>b.date.localeCompare(a.date)):[...diaries].filter(d=>d.date.startsWith(filterMonth)).sort((a,b)=>b.date.localeCompare(a.date));
+  const [lightbox, setLightbox] = useState(null); // {photos, index} | null
+  const [uploading, setUploading] = useState(false);
+
+  // Upload file(s) — tries Supabase Storage first; falls back to base64
+  const addPhotos = async (files, userId) => {
+    setUploading(true);
+    const results = await Promise.all(Array.from(files).map(async file => {
+      const cloudUrl = await sbUploadPhoto(file, userId);
+      if(cloudUrl) {
+        return { url: cloudUrl, src: cloudUrl, caption: "", ts: new Date().toISOString(), _cloud: true };
+      }
+      // Fallback: read as base64 (works offline)
+      return new Promise(res => {
+        const reader = new FileReader();
+        reader.onload = ev => res({ src: ev.target.result, caption: "", ts: new Date().toISOString() });
+        reader.readAsDataURL(file);
+      });
+    }));
+    setForm(f => ({ ...f, photos: [...(f.photos||[]), ...results] }));
+    setUploading(false);
+  };
+
   const newEntry=()=>{setForm({id:`D${String(diaries.length+1).padStart(3,"0")}`,date:today(),weather:"sunny",gangsPresent:0,temperature:"",works:[{area:"",description:"",manHours:0,materials:""}],workforce:[],photos:[],issues:"",visitors:"",author:team[0]?.id||"PM"});setShowAdd(true);};
   const upWork=(i,k,v)=>setForm(f=>{const w=[...f.works];w[i]={...w[i],[k]:v};return {...f,works:w};});
   const totalHours=diaries.reduce((s,d)=>s+(d.works||[]).reduce((ss,w)=>ss+(w.manHours||0),0),0);
@@ -2433,9 +2582,13 @@ function DiaryView({diaries,setDiaries,team}){
                     <div style={{fontSize:"9px",fontWeight:"700",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",marginBottom:"6px",textTransform:"uppercase",letterSpacing:"0.1em"}}>📸 Site Photos ({(d.photos||[]).length})</div>
                     <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
                       {(d.photos||[]).map((p,i)=>(
-                        <div key={i} style={{position:"relative",width:"80px",height:"80px",borderRadius:"6px",overflow:"hidden",border:"1px solid var(--border2)",cursor:"pointer",flexShrink:0}} onClick={()=>window.open(p.src,"_blank")}>
-                          <img src={p.src} alt={p.caption||"Site photo"} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                        <div key={i} style={{position:"relative",width:"80px",height:"80px",borderRadius:"6px",overflow:"hidden",border:"1px solid var(--border2)",cursor:"pointer",flexShrink:0}}
+                          onClick={()=>setLightbox({photos:d.photos,index:i})}>
+                          <img src={p.url||p.src} alt={p.caption||"Site photo"} style={{width:"100%",height:"100%",objectFit:"cover"}}
+                            onError={e=>{e.target.style.display="none";e.target.nextSibling&&(e.target.nextSibling.style.display="flex");}}/>
+                          <div style={{display:"none",width:"100%",height:"100%",alignItems:"center",justifyContent:"center",background:"var(--bg)",fontSize:"20px"}}>🖼</div>
                           {p.caption&&<div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,0.6)",fontSize:"7px",color:"#fff",padding:"2px 4px",fontFamily:"'Share Tech Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.caption}</div>}
+                          {p.url&&<div style={{position:"absolute",top:"3px",right:"3px",background:"rgba(0,0,0,0.55)",borderRadius:"3px",padding:"1px 4px",fontSize:"7px",color:"#fff",fontFamily:"'Share Tech Mono',monospace"}}>☁</div>}
                         </div>
                       ))}
                     </div>
@@ -2446,6 +2599,8 @@ function DiaryView({diaries,setDiaries,team}){
           );
         })}
       </div>
+      {lightbox&&<PhotoLightbox photos={lightbox.photos} startIndex={lightbox.index} onClose={()=>setLightbox(null)}/>}
+
       {showAdd&&form&&(
         <>
           <div className="edit-overlay" onClick={()=>{setShowAdd(false);setForm(null);}}/>
@@ -2530,8 +2685,9 @@ function DiaryView({diaries,setDiaries,team}){
                   <div style={{display:"flex",gap:"10px",flexWrap:"wrap",marginBottom:"12px"}}>
                     {(form.photos||[]).map((p,i)=>(
                       <div key={i} style={{position:"relative",width:"90px",flexShrink:0}}>
-                        <div style={{width:"90px",height:"90px",borderRadius:"6px",overflow:"hidden",border:"1px solid var(--border2)"}}>
-                          <img src={p.src} alt={p.caption||"Photo"} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                        <div onClick={()=>setLightbox({photos:form.photos,index:i})} style={{width:"90px",height:"90px",borderRadius:"6px",overflow:"hidden",border:"1px solid var(--border2)",cursor:"pointer",position:"relative"}}>
+                          <img src={p.url||p.src} alt={p.caption||"Photo"} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                          {p._cloud&&<div style={{position:"absolute",top:"3px",left:"3px",background:"rgba(0,0,0,0.55)",borderRadius:"3px",padding:"1px 4px",fontSize:"7px",color:"#fff",fontFamily:"'Share Tech Mono',monospace"}}>☁</div>}
                         </div>
                         <input className="field-input" value={p.caption||""} onChange={e=>{const ph=[...form.photos];ph[i]={...ph[i],caption:e.target.value};setForm(f=>({...f,photos:ph}));}} placeholder="Caption..." style={{fontSize:"8px",padding:"3px 5px",marginTop:"3px",width:"100%"}}/>
                         <button onClick={()=>setForm(f=>({...f,photos:f.photos.filter((_,j)=>j!==i)}))} style={{position:"absolute",top:"3px",right:"3px",background:"var(--red)",border:"none",borderRadius:"50%",width:"18px",height:"18px",cursor:"pointer",color:"#fff",fontSize:"11px",fontWeight:"900",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>×</button>
@@ -2540,27 +2696,29 @@ function DiaryView({diaries,setDiaries,team}){
                   </div>
                 )}
                 <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-                  <label style={{flex:1,minWidth:"140px",display:"flex",alignItems:"center",justifyContent:"center",gap:"7px",padding:"10px 14px",background:"var(--accent)10",border:"1px dashed var(--accent)55",color:"var(--accent)",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.1em",borderRadius:"4px",cursor:"pointer"}}>
-                    <span style={{fontSize:"14px"}}>📁</span> Gallery / File
-                    <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{
-                      const files=Array.from(e.target.files||[]);
-                      files.forEach(file=>{const reader=new FileReader();reader.onload=ev=>setForm(f=>({...f,photos:[...(f.photos||[]),{src:ev.target.result,caption:"",ts:new Date().toISOString()}]}));reader.readAsDataURL(file);});
+                  <label style={{flex:1,minWidth:"140px",display:"flex",alignItems:"center",justifyContent:"center",gap:"7px",padding:"10px 14px",background:"var(--accent)10",border:"1px dashed var(--accent)55",color:uploading?"var(--text4)":"var(--accent)",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.1em",borderRadius:"4px",cursor:uploading?"not-allowed":"pointer",pointerEvents:uploading?"none":"auto"}}>
+                    <span style={{fontSize:"14px"}}>{uploading?"⟳":"📁"}</span> {uploading?"Uploading…":"Gallery / File"}
+                    <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={async e=>{
+                      const files=e.target.files;
+                      if(!files?.length) return;
+                      await addPhotos(files, currentUserId);
                       e.target.value="";
                     }}/>
                   </label>
-                  <label style={{flex:1,minWidth:"140px",display:"flex",alignItems:"center",justifyContent:"center",gap:"7px",padding:"10px 14px",background:"var(--green)10",border:"1px dashed var(--green)55",color:"var(--green)",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.1em",borderRadius:"4px",cursor:"pointer"}}>
-                    <span style={{fontSize:"14px"}}>📷</span> Camera
-                    <input type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>{
-                      const file=e.target.files?.[0];
-                      if(!file) return;
-                      const reader=new FileReader();
-                      reader.onload=ev=>setForm(f=>({...f,photos:[...(f.photos||[]),{src:ev.target.result,caption:"",ts:new Date().toISOString()}]}));
-                      reader.readAsDataURL(file);
+                  <label style={{flex:1,minWidth:"140px",display:"flex",alignItems:"center",justifyContent:"center",gap:"7px",padding:"10px 14px",background:"var(--green)10",border:"1px dashed var(--green)55",color:uploading?"var(--text4)":"var(--green)",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.1em",borderRadius:"4px",cursor:uploading?"not-allowed":"pointer",pointerEvents:uploading?"none":"auto"}}>
+                    <span style={{fontSize:"14px"}}>{uploading?"⟳":"📷"}</span> {uploading?"Uploading…":"Camera"}
+                    <input type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={async e=>{
+                      const files=e.target.files;
+                      if(!files?.length) return;
+                      await addPhotos(files, currentUserId);
                       e.target.value="";
                     }}/>
                   </label>
                 </div>
-                {(form.photos||[]).length===0&&<div style={{textAlign:"center",padding:"12px",fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",marginTop:"4px"}}>No photos attached yet</div>}
+                {(form.photos||[]).length===0&&!uploading&&<div style={{textAlign:"center",padding:"12px",fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",marginTop:"4px"}}>No photos attached yet</div>}
+                {uploading&&<div style={{textAlign:"center",padding:"10px",fontSize:"9px",color:"var(--accent)",fontFamily:"'Share Tech Mono',monospace",marginTop:"4px",animation:"fadeIn 0.2s"}}>☁ Uploading to cloud…</div>}
+                {(form.photos||[]).some(p=>p._cloud)&&<div style={{fontSize:"8px",color:"var(--green)",fontFamily:"'Share Tech Mono',monospace",marginTop:"6px",textAlign:"center"}}>☁ Photos saved to cloud — shareable on any device</div>}
+                {(form.photos||[]).some(p=>!p._cloud&&p.src?.startsWith("data:"))&&<div style={{fontSize:"8px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",marginTop:"4px",textAlign:"center"}}>⚠ Some photos are device-only (offline upload). Connect to sync.</div>}
               </div>
               <div className="edit-section">
                 <div className="edit-section-title">⚠️ Issues & Observations</div>
@@ -3999,49 +4157,164 @@ const pushSchedule = async (token, wps) => {
       - Copy your Public Key from Settings → API
    ────────────────────────────────────────────────────────────── */
 const FCC_CONFIG = {
-  supabaseUrl:     "https://tdswjztqcwgpvmwqczjl.supabase.co",   // e.g. "https://xxxx.supabase.co"
-  supabaseKey:     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkc3dqenRxY3dncHZtd3FjempsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwOTMzMTIsImV4cCI6MjA4ODY2OTMxMn0.c7vEV9QmpetxxENUyB5ybE55kv_2vS7JjxPUSt1Rzu0",   // anon/public key
+  supabaseUrl:     "https://tdswjztqcwgpvmwqczjl.supabase.co",
+  supabaseKey:     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkc3dqenRxY3dncHZtd3FjempsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwOTMzMTIsImV4cCI6MjA4ODY2OTMxMn0.c7vEV9QmpetxxENUyB5ybE55kv_2vS7JjxPUSt1Rzu0",
+  /*
+   ── SUPABASE PRODUCTION SETUP (idempotent — safe to re-run) ──────────────
+   Paste each block into the Supabase SQL Editor and click Run.
+
+   -- 1. Projects table
+   create table if not exists fcc_projects (
+     id          text primary key,
+     owner_id    uuid references auth.users(id) on delete cascade,
+     data        jsonb,
+     created_at  timestamptz default now(),
+     updated_at  timestamptz default now()
+   );
+
+   -- 2. User analytics table (lightweight signup/login monitoring)
+   create table if not exists fcc_users (
+     id          uuid primary key references auth.users(id) on delete cascade,
+     email       text,
+     name        text,
+     org         text,
+     plan        text default 'free',
+     is_guest    boolean default false,
+     created_at  timestamptz default now(),
+     last_seen   timestamptz default now()
+   );
+
+   -- 3. Enable Row-Level Security on both tables
+   alter table fcc_projects enable row level security;
+   alter table fcc_users    enable row level security;
+
+   -- 4. PRODUCTION RLS — each user sees only their own rows
+   drop policy if exists "Allow all"    on fcc_projects;
+   drop policy if exists "Owner select" on fcc_projects;
+   drop policy if exists "Owner insert" on fcc_projects;
+   drop policy if exists "Owner update" on fcc_projects;
+   drop policy if exists "Owner delete" on fcc_projects;
+
+   create policy "Owner select" on fcc_projects
+     for select using (owner_id = auth.uid());
+   create policy "Owner insert" on fcc_projects
+     for insert with check (owner_id = auth.uid());
+   create policy "Owner update" on fcc_projects
+     for update using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+   create policy "Owner delete" on fcc_projects
+     for delete using (owner_id = auth.uid());
+
+   drop policy if exists "Self access" on fcc_users;
+   create policy "Self access" on fcc_users
+     for all using (id = auth.uid()) with check (id = auth.uid());
+
+   -- 5. Auto-updated timestamp trigger
+   create or replace function fcc_set_updated_at()
+   returns trigger language plpgsql as $$
+   begin new.updated_at = now(); return new; end $$;
+
+   drop trigger if exists fcc_projects_updated_at on fcc_projects;
+   create trigger fcc_projects_updated_at
+     before update on fcc_projects
+     for each row execute procedure fcc_set_updated_at();
+
+   -- 6. Shared snapshots table (short-link sharing)
+   create table if not exists fcc_snapshots (
+     id          text primary key,           -- 8-char random slug
+     data        jsonb not null,             -- full project payload
+     created_by  uuid references auth.users(id) on delete set null,
+     created_at  timestamptz default now(),
+     expires_at  timestamptz default (now() + interval '90 days')
+   );
+   alter table fcc_snapshots enable row level security;
+   -- Anyone can read a snapshot by its ID (it's essentially a secret URL)
+   drop policy if exists "Public read snapshots"  on fcc_snapshots;
+   drop policy if exists "Owner insert snapshots" on fcc_snapshots;
+   create policy "Public read snapshots"  on fcc_snapshots for select using (true);
+   create policy "Owner insert snapshots" on fcc_snapshots for insert with check (true);
+
+   -- 7. Realtime publication
+   do $$
+   begin
+     if not exists (
+       select 1 from pg_publication_tables
+       where pubname = 'supabase_realtime' and tablename = 'fcc_projects'
+     ) then
+       alter publication supabase_realtime add table fcc_projects;
+     end if;
+   end $$;
+   ──────────────────────────────────────────────────────────────────────── */
 
   // ── M-Pesa Daraja (primary Kenya payment) ──────────────────────
-  mpesaRelayUrl:   "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest",   // URL of your /mpesa-relay Supabase Edge Function
+  mpesaRelayUrl:   "",   // URL of your /mpesa-relay Supabase Edge Function
   mpesaShortcode:  "174379",   // Lipa Na M-Pesa shortcode (174379 = sandbox)
-  mpesaPasskey:    "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919",   // From Daraja portal (sandbox has a default)
+  mpesaPasskey:    "",   // From Daraja portal (sandbox has a default)
   mpesaEnv:        "sandbox",  // "sandbox" | "live"
 
   // ── Paystack fallback (cards + M-Pesa via Paystack) ────────────
   paystackPublicKey: "pk_test_63e1fcfd734d117a23475494ea27c8499d1eb634",  // pk_test_... or pk_live_... from paystack.com
 };
 
-/* ── 2. PLANS ────────────────────────────────────────────────── */
+/* ── 2. FREE-FOR-ALL MODE (monitoring phase) ─────────────────────
+   All features are unlocked for free while we monitor user growth.
+   Add-on definitions kept as stubs so existing references don't break.
+   When ready to monetise, restore prices and re-enable the paywall.
+   ─────────────────────────────────────────────────────────────── */
+const IAP_ADDONS = {
+  sync:         { id:"sync",         label:"Cloud Sync",         icon:"☁",  price:0, desc:"Included free", features:["Auto cloud backup","Multi-device access"], color:"#3182CE" },
+  integrations: { id:"integrations", label:"Integrations Pack",  icon:"⚡", price:0, desc:"Included free", features:["Excel / P6 / MSP import","Full JSON backup"], color:"#805AD5" },
+  reports:      { id:"reports",      label:"Reports & Payments", icon:"📄", price:0, desc:"Included free", features:["RE Report export","M-Pesa / card payments"], color:"#D69E2E" },
+};
+
+// All features unlocked — no paywall during monitoring phase
+const getAddons = () => ({ sync:{purchasedAt:"free"}, integrations:{purchasedAt:"free"}, reports:{purchasedAt:"free"} });
+const saveAddon = (_id) => {};          // no-op — nothing to persist
+const hasAddon  = (_id) => true;        // always returns true
+
+/* ── 3. LOCAL PROFILE (no auth required) ───────────────────────
+   A lightweight profile stored in localStorage. No password.
+   ─────────────────────────────────────────────────────────────── */
+const getLocalProfile = () => {
+  try{
+    const p = JSON.parse(localStorage.getItem("ojola_profile"));
+    if(p?.id) return p;
+  }catch{}
+  const p = { id:"user-"+Math.random().toString(36).slice(2,8), name:"", org:"", createdAt:new Date().toISOString() };
+  try{ localStorage.setItem("ojola_profile", JSON.stringify(p)); }catch{}
+  return p;
+};
+const saveLocalProfile = (updates) => {
+  try{
+    const p = { ...getLocalProfile(), ...updates };
+    localStorage.setItem("ojola_profile", JSON.stringify(p));
+    return p;
+  }catch{ return getLocalProfile(); }
+};
+
+// Legacy compat — keep FCC_PLANS so billing references don't crash
 const FCC_PLANS = {
-  free:  { label:"Free",  price:0,       projectLimit:1,  members:1,  color:"#718096" },
-  pro:   { label:"Pro",   price:4900,    projectLimit:10, members:5,  color:"#3182CE" },
-  team:  { label:"Team",  price:14900,   projectLimit:99, members:25, color:"#805AD5" },
+  free: { label:"Free", price:0, projectLimit:99, members:99, color:"#718096" },
 };
+const fccCan = () => true; // everyone can do everything — no RBAC needed
 
-/* ── 3. ROLES & RBAC ─────────────────────────────────────────── */
-const FCC_ROLES = {
-  owner:  { label:"Owner",   can:["view","edit","delete","invite","billing","settings"] },
-  admin:  { label:"Admin",   can:["view","edit","delete","invite","settings"] },
-  member: { label:"Member",  can:["view","edit"] },
-  viewer: { label:"Viewer",  can:["view"] },
-};
-
-const fccCan = (user, action) => {
-  const role = user?.role || "viewer";
-  return (FCC_ROLES[role]?.can || []).includes(action);
-};
-
-/* ── 4. SUPABASE BRIDGE ──────────────────────────────────────── */
+/* ── 4. SUPABASE BRIDGE (production-hardened) ───────────────── */
 const sbReady = () => FCC_CONFIG.supabaseUrl && FCC_CONFIG.supabaseKey;
+
+// Always send the user's JWT when available — required for owner_id = auth.uid() RLS
+const sbAuthToken = () => {
+  try {
+    const p = JSON.parse(localStorage.getItem("ojola_profile")||"{}");
+    return p.access_token || FCC_CONFIG.supabaseKey;
+  } catch { return FCC_CONFIG.supabaseKey; }
+};
 
 const sbFetch = async (path, opts={}) => {
   const res = await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/${path}`, {
     headers: {
-      "apikey": FCC_CONFIG.supabaseKey,
-      "Authorization": `Bearer ${FCC_CONFIG.supabaseKey}`,
-      "Content-Type": "application/json",
-      "Prefer": "return=representation",
+      "apikey":         FCC_CONFIG.supabaseKey,
+      "Authorization":  `Bearer ${sbAuthToken()}`,
+      "Content-Type":   "application/json",
+      "Prefer":         "return=representation",
       ...(opts.headers||{})
     },
     ...opts
@@ -4050,53 +4323,118 @@ const sbFetch = async (path, opts={}) => {
   return res.json();
 };
 
+// Upsert a row in fcc_users for analytics (non-blocking)
+const sbTrackUser = async (user) => {
+  if(!sbReady() || !user?.id || user.id.startsWith("local-") || user.id.startsWith("guest-")) return;
+  try {
+    await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/fcc_users`, {
+      method: "POST",
+      headers: {
+        "apikey":        FCC_CONFIG.supabaseKey,
+        "Authorization": `Bearer ${sbAuthToken()}`,
+        "Content-Type":  "application/json",
+        "Prefer":        "resolution=merge-duplicates,return=minimal"
+      },
+      body: JSON.stringify({
+        id:        user.id,
+        email:     user.email || null,
+        name:      user.name  || null,
+        org:       user.org   || null,
+        plan:      "free",
+        is_guest:  !!user.isGuest,
+        last_seen: new Date().toISOString()
+      })
+    });
+  } catch(e) { /* non-critical */ }
+};
+
 const sbSignup = async (name, email, password) => {
   if(!sbReady()) {
-    // local-first fallback
+    // Supabase not configured — local-only fallback
     const u = { id:"local-"+Date.now(), name, email, role:"owner", plan:"free", org:"Local Org", createdAt:new Date().toISOString() };
     try{ localStorage.setItem("fcc_user", JSON.stringify(u)); }catch{}
     return { user:u };
   }
-  const res = await fetch(`${FCC_CONFIG.supabaseUrl}/auth/v1/signup`, {
-    method:"POST",
-    headers:{ "apikey":FCC_CONFIG.supabaseKey, "Content-Type":"application/json" },
-    body: JSON.stringify({ email, password, data:{ name } })
-  });
-  const data = await res.json();
-  if(data.error) throw new Error(data.error.message||data.error);
-  const u = { id:data.user?.id, name, email, role:"owner", plan:"free", org:"", createdAt:new Date().toISOString(), access_token:data.access_token };
+  let res, data;
+  try {
+    res = await fetch(`${FCC_CONFIG.supabaseUrl}/auth/v1/signup`, {
+      method:"POST",
+      headers:{ "apikey":FCC_CONFIG.supabaseKey, "Content-Type":"application/json" },
+      body: JSON.stringify({ email, password, data:{ name } })
+    });
+    data = await res.json();
+  } catch(netErr) {
+    throw new Error("Network error — check your internet connection and try again.");
+  }
+  if(!res.ok || data.error) {
+    const msg = data?.error?.message || data?.msg || data?.error || "Sign-up failed.";
+    // Map common Supabase error codes to plain English
+    if(/already registered/i.test(msg))    throw new Error("This email is already registered. Try signing in instead.");
+    if(/password.*short|characters/i.test(msg)) throw new Error("Password must be at least 6 characters.");
+    if(/invalid.*email/i.test(msg))        throw new Error("Enter a valid email address.");
+    throw new Error(msg);
+  }
+  // Supabase returns user in data.user (email confirm OFF) or data.identities (confirm ON)
+  const userId = data.user?.id || data.id;
+  if(!userId) throw new Error("Account created — check your email to confirm before signing in.");
+  const u = { id:userId, name, email, role:"owner", plan:"free", org:"", createdAt:new Date().toISOString(), access_token:data.access_token||null };
   try{ localStorage.setItem("fcc_user", JSON.stringify(u)); }catch{}
   return { user:u };
 };
 
 const sbLogin = async (email, password) => {
   if(!sbReady()) {
-    // local-first: check stored user
+    // Supabase not configured — check locally stored user
     let stored=null;
     try{ stored=JSON.parse(localStorage.getItem("fcc_user")); }catch{}
     if(stored && stored.email===email) return { user:stored };
-    throw new Error("No account found. Please sign up first.");
+    throw new Error("No local account found. Please sign up first, or check your internet connection.");
   }
-  const res = await fetch(`${FCC_CONFIG.supabaseUrl}/auth/v1/token?grant_type=password`, {
-    method:"POST",
-    headers:{ "apikey":FCC_CONFIG.supabaseKey, "Content-Type":"application/json" },
-    body: JSON.stringify({ email, password })
-  });
-  const data = await res.json();
-  if(data.error) throw new Error(data.error.message||data.error);
-  const u = { id:data.user?.id, name:data.user?.user_metadata?.name||email.split("@")[0], email, role:"owner", plan:"free", org:"", access_token:data.access_token };
+  let res, data;
+  try {
+    res = await fetch(`${FCC_CONFIG.supabaseUrl}/auth/v1/token?grant_type=password`, {
+      method:"POST",
+      headers:{ "apikey":FCC_CONFIG.supabaseKey, "Content-Type":"application/json" },
+      body: JSON.stringify({ email, password })
+    });
+    data = await res.json();
+  } catch(netErr) {
+    throw new Error("Network error — check your internet connection and try again.");
+  }
+  if(!res.ok || data.error) {
+    const msg = data?.error?.message || data?.error_description || data?.error || "Login failed.";
+    if(/invalid.*credentials|wrong.*password|Email not confirmed/i.test(msg))
+      throw new Error("Incorrect email or password. Double-check and try again.");
+    if(/email.*not.*confirmed/i.test(msg))
+      throw new Error("Please confirm your email address first — check your inbox for the verification link.");
+    if(/too many requests/i.test(msg))
+      throw new Error("Too many attempts — wait a minute then try again.");
+    throw new Error(msg);
+  }
+  const u = {
+    id: data.user?.id,
+    name: data.user?.user_metadata?.name || email.split("@")[0],
+    email,
+    role: "owner", plan: "free", org: "",
+    access_token: data.access_token
+  };
   try{ localStorage.setItem("fcc_user", JSON.stringify(u)); }catch{}
   return { user:u };
 };
 
 const sbLoadProjects = async (userId) => {
-  if(!sbReady()) {
+  if(!sbReady() || !userId || String(userId).startsWith("guest-") || String(userId).startsWith("local-")) {
     try{ return JSON.parse(localStorage.getItem("ahp_projects"))||[]; }catch{ return []; }
   }
   try{
-    const rows = await sbFetch(`fcc_projects?owner_id=eq.${userId}&order=created_at.desc`);
-    return rows.map(r=>r.data||r);
-  }catch(e){ try{ return JSON.parse(localStorage.getItem("ahp_projects"))||[]; }catch{ return []; } }
+    // RLS enforces owner_id = auth.uid() — sending JWT means no manual filter needed,
+    // but keeping owner_id filter as a defence-in-depth safeguard
+    const rows = await sbFetch(`fcc_projects?owner_id=eq.${userId}&order=updated_at.desc`);
+    return rows.map(r=>({ ...(r.data||r), _cloudUpdatedAt: r.updated_at }));
+  }catch(e){
+    console.warn("[Ojola] Cloud load failed, using local:", e.message);
+    try{ return JSON.parse(localStorage.getItem("ahp_projects"))||[]; }catch{ return []; }
+  }
 };
 
 const sbSaveProject = async (userId, project) => {
@@ -4104,18 +4442,172 @@ const sbSaveProject = async (userId, project) => {
   try{
     const all = JSON.parse(localStorage.getItem("ahp_projects"))||[];
     const idx = all.findIndex(p=>p.id===project.id);
-    if(idx>=0) all[idx]=project; else all.push(project);
+    // Stamp updated_at for merge resolution
+    const stamped = {...project, updated_at: new Date().toISOString()};
+    if(idx>=0) all[idx]=stamped; else all.push(stamped);
     localStorage.setItem("ahp_projects", JSON.stringify(all));
   }catch{}
-  // Best-effort Supabase upsert
-  if(!sbReady()||!userId) return;
+  // Best-effort Supabase upsert (skipped for guests — local-only)
+  if(!sbReady() || !userId || String(userId).startsWith("guest-") || String(userId).startsWith("local-")) return;
   try{
-    await sbFetch(`fcc_projects?id=eq.${project.id}`, {
+    const stamped = {...project, updated_at: new Date().toISOString()};
+    const res = await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/fcc_projects`, {
       method:"POST",
-      headers:{ "Prefer":"resolution=merge-duplicates" },
-      body: JSON.stringify({ id:project.id, owner_id:userId, data:project, updated_at:new Date().toISOString() })
+      headers:{
+        "apikey":        FCC_CONFIG.supabaseKey,
+        "Authorization": `Bearer ${sbAuthToken()}`,   // JWT required for RLS owner_id = auth.uid()
+        "Content-Type":  "application/json",
+        "Prefer":        "resolution=merge-duplicates,return=minimal"
+      },
+      body: JSON.stringify({
+        id:         stamped.id || ("proj-" + Date.now()),
+        owner_id:   userId,
+        data:       stamped,
+        updated_at: stamped.updated_at
+      })
     });
-  }catch(e){ console.warn("Supabase save skipped:",e.message); }
+    if(!res.ok){ const txt = await res.text(); console.warn("[Ojola] Save failed:", txt); }
+  }catch(e){ console.warn("[Ojola] Save skipped (offline):", e.message); }
+};
+
+/* ── 4a-2. SNAPSHOT SHORT-LINK HELPERS ───────────────────────────
+   sbSaveSnapshot  — stores full payload, returns 8-char share ID
+   sbLoadSnapshot  — fetches payload by ID (used at boot time)
+   ─────────────────────────────────────────────────────────────── */
+
+const genShareId = () => {
+  const chars = "abcdefghjkmnpqrstuvwxyz23456789"; // no 0/O/1/I/l confusion
+  let id = "";
+  for(let i = 0; i < 8; i++) id += chars[Math.floor(Math.random() * chars.length)];
+  return id;
+};
+
+const sbSaveSnapshot = async (payload, userId) => {
+  if(!sbReady()) throw new Error("Cloud storage not available.");
+  const id = genShareId();
+  let res;
+  try {
+    res = await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/fcc_snapshots`, {
+      method: "POST",
+      headers: {
+        "apikey":        FCC_CONFIG.supabaseKey,
+        "Authorization": `Bearer ${sbAuthToken()}`,
+        "Content-Type":  "application/json",
+        "Prefer":        "return=minimal"
+      },
+      body: JSON.stringify({
+        id,
+        data:       payload,
+        created_by: userId || null
+      })
+    });
+  } catch(netErr) {
+    throw new Error("Network error — check your connection and try again.");
+  }
+  if(!res.ok) {
+    const txt = await res.text().catch(()=>"");
+    throw new Error("Failed to save snapshot: " + (txt||res.status));
+  }
+  return id;
+};
+
+const sbLoadSnapshot = async (id) => {
+  if(!sbReady() || !id) return null;
+  try {
+    const res = await fetch(
+      `${FCC_CONFIG.supabaseUrl}/rest/v1/fcc_snapshots?id=eq.${encodeURIComponent(id)}&select=data,expires_at`,
+      { headers: { "apikey": FCC_CONFIG.supabaseKey, "Authorization": `Bearer ${FCC_CONFIG.supabaseKey}` } }
+    );
+    if(!res.ok) return null;
+    const rows = await res.json();
+    if(!rows?.length) return null;
+    const row = rows[0];
+    if(row.expires_at && new Date(row.expires_at) < new Date()) return null; // expired
+    return row.data;
+  } catch(e) { return null; }
+};
+
+/* ── 4a-3. SUPABASE STORAGE — PHOTO UPLOADS ─────────────────────
+   Photos are uploaded to the 'site-photos' public bucket and stored
+   as HTTPS URLs. This means they open on any device, work in shared
+   snapshots, and don't bloat localStorage.
+
+   SQL / Supabase Dashboard setup (one-time):
+   ─────────────────────────────────────────
+   1. Go to Storage → New bucket → Name: "site-photos" → Public: ON
+   2. Under Policies add:
+      INSERT: (bucket_id = 'site-photos') — authenticated users
+      SELECT: (bucket_id = 'site-photos') — public (true)
+   Or run in SQL Editor:
+      insert into storage.buckets (id, name, public)
+        values ('site-photos', 'site-photos', true)
+        on conflict (id) do nothing;
+      create policy "Public read photos"
+        on storage.objects for select using (bucket_id = 'site-photos');
+      create policy "Auth upload photos"
+        on storage.objects for insert
+        with check (bucket_id = 'site-photos');
+   ─────────────────────────────────────────────────────────────── */
+
+// Upload a photo file (File or Blob) to Supabase Storage.
+// Returns the public HTTPS URL, or null if unavailable.
+const sbUploadPhoto = async (file, userId) => {
+  if(!sbReady()) return null;
+  try {
+    // Build a unique path: photos/<userId>/<timestamp>-<random>.<ext>
+    const ext  = (file.name || "photo.jpg").split(".").pop().toLowerCase().replace(/[^a-z0-9]/g,"") || "jpg";
+    const uid  = userId || "anon";
+    const name = `${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+    const path = `photos/${uid}/${name}`;
+    const res  = await fetch(
+      `${FCC_CONFIG.supabaseUrl}/storage/v1/object/site-photos/${path}`,
+      {
+        method:  "POST",
+        headers: {
+          "apikey":        FCC_CONFIG.supabaseKey,
+          "Authorization": `Bearer ${sbAuthToken()}`,
+          "Content-Type":  file.type || "image/jpeg",
+          "x-upsert":      "true"
+        },
+        body: file
+      }
+    );
+    if(!res.ok) {
+      const txt = await res.text().catch(()=>"");
+      console.warn("[FCC] Photo upload failed:", txt);
+      return null;
+    }
+    // Construct the public URL
+    return `${FCC_CONFIG.supabaseUrl}/storage/v1/object/public/site-photos/${path}`;
+  } catch(e) {
+    console.warn("[FCC] Photo upload error:", e.message);
+    return null;
+  }
+};
+
+/* ── 4b. SUPABASE REALTIME CLIENT + PRESENCE ─────────────────────
+   Singleton Supabase JS client (used for realtime channels).
+   Raw REST (sbFetch) is kept for data ops; the JS client handles
+   realtime subscriptions, presence, and broadcasts.
+   ─────────────────────────────────────────────────────────────── */
+let _sbJsClient = null;
+const getSupabaseClient = () => {
+  if(_sbJsClient) return _sbJsClient;
+  if(!FCC_CONFIG.supabaseUrl || !FCC_CONFIG.supabaseKey) return null;
+  try{
+    const { createClient } = window.supabase || {};
+    if(!createClient) return null;
+    _sbJsClient = createClient(FCC_CONFIG.supabaseUrl, FCC_CONFIG.supabaseKey, {
+      realtime: { params: { eventsPerSecond: 5 } }
+    });
+    return _sbJsClient;
+  }catch(e){ console.warn("[Ojola RT] Supabase client init failed:", e.message); return null; }
+};
+
+// Ensure the fcc_projects table exists via REST (best-effort, ignores if already exists)
+const ensureProjectsTable = async () => {
+  // We use the REST API to test; if the table doesn't exist the first save will fail gracefully
+  // Users should run the SQL setup from the in-app instructions if needed
 };
 
 /* ── 5. M-PESA DARAJA STK PUSH + PAYSTACK CHECKOUT ──────────── */
@@ -4370,298 +4862,370 @@ const readInviteToken = () => {
 
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
 
-/* ── AUTH SCREEN (split-panel: login + signup, pricing panel) ── */
-function AuthScreen({ onAuth }) {
-  const [mpesaModal, setMpesaModal] = React.useState(null); // {plan,amount,userEmail}
-  const [mode, setMode] = useState(() => readInviteToken() ? "signup" : "login");
-  const [step, setStep] = useState(1); // 1=credentials, 2=org details
-  const [form, setForm] = useState({ name:"", email:"", password:"", org:"", role:"owner", inviteToken: readInviteToken()||"" });
-  const [err, setErr] = useState("");
-  const [busy, setBusy] = useState(false);
-  const up = (k,v) => setForm(f=>({...f,[k]:v}));
+/* ── AUTH SCREEN — Login · Sign Up · Guest mode · Password reset ── */
+function AuthScreen({ onDone }) {
+  const [mode,     setMode]     = useState("login"); // "login" | "signup" | "reset"
+  const [email,    setEmail]    = useState("");
+  const [password, setPassword] = useState("");
+  const [name,     setName]     = useState("");
+  const [org,      setOrg]      = useState("");
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState("");
+  const [info,     setInfo]     = useState("");
+  const [showPass, setShowPass] = useState(false);
 
-  // Auto-detect upgrade from Stripe redirect
-  const upgraded = new URLSearchParams(window.location.search).get("upgraded");
+  const clear = () => { setError(""); setInfo(""); };
 
-  const doLogin = async () => {
-    if(!form.email||!form.password){ setErr("Please fill in email and password."); return; }
-    setBusy(true); setErr("");
-    try{
-      const { user } = await sbLogin(form.email.trim(), form.password);
-      onAuth(user);
-    }catch(e){ setErr(e.message); }
-    setBusy(false);
+  const handleLogin = async () => {
+    if(!email.trim() || !password) { setError("Enter your email and password."); return; }
+    setLoading(true); clear();
+    try {
+      const { user } = await sbLogin(email.trim().toLowerCase(), password);
+      const profile = saveLocalProfile({
+        id: user.id, name: user.name || email.split("@")[0],
+        email: user.email || email.trim().toLowerCase(),
+        org: user.org || "", access_token: user.access_token, isGuest: false
+      });
+      sbTrackUser(profile);  // analytics ping
+      onDone(profile);
+    } catch(e) { setError(e.message || "Login failed — check your credentials."); }
+    setLoading(false);
   };
 
-  const doSignupStep1 = () => {
-    if(!form.name.trim()||!form.email.trim()||form.password.length<6){
-      setErr("Name, email and password (min 6 chars) required."); return;
-    }
-    setErr(""); setStep(2);
+  const handleSignup = async () => {
+    if(!name.trim()) { setError("Enter your full name."); return; }
+    if(!email.trim() || !/\S+@\S+\.\S+/.test(email)) { setError("Enter a valid email address."); return; }
+    if(password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    setLoading(true); clear();
+    try {
+      const { user } = await sbSignup(name.trim(), email.trim().toLowerCase(), password);
+      const profile = saveLocalProfile({
+        id: user.id, name: name.trim(),
+        email: email.trim().toLowerCase(), org: org.trim(),
+        access_token: user.access_token, isGuest: false
+      });
+      sbTrackUser(profile);
+      setInfo("✓ Account created! Check your email to confirm, then sign in.");
+      setMode("login");
+    } catch(e) { setError(e.message || "Sign-up failed — try again."); }
+    setLoading(false);
   };
 
-  const doSignupStep2 = async () => {
-    setBusy(true); setErr("");
-    try{
-      const { user } = await sbSignup(form.name.trim(), form.email.trim(), form.password);
-      const u = { ...user, org: form.org||"My Organisation", role: form.role };
-      if(upgraded) u.plan = upgraded;
-      if(form.inviteToken) u.inviteToken = form.inviteToken;
-      try{ localStorage.setItem("fcc_user", JSON.stringify(u)); }catch{}
-      onAuth(u);
-    }catch(e){ setErr(e.message); }
-    setBusy(false);
+  const handleReset = async () => {
+    if(!email.trim()) { setError("Enter your email address."); return; }
+    setLoading(true); clear();
+    try {
+      if(sbReady()) {
+        let res;
+        try {
+          res = await fetch(`${FCC_CONFIG.supabaseUrl}/auth/v1/recover`, {
+            method:"POST",
+            headers:{ "apikey":FCC_CONFIG.supabaseKey, "Content-Type":"application/json" },
+            body: JSON.stringify({ email: email.trim().toLowerCase() })
+          });
+        } catch(netErr) {
+          throw new Error("Network error — check your internet connection.");
+        }
+        if(!res.ok) throw new Error("Reset request failed — try again.");
+      }
+      setInfo("✓ If that email exists, a reset link has been sent. Check your inbox.");
+      setMode("login");
+    } catch(e) { setError(e.message || "Reset failed."); }
+    setLoading(false);
   };
 
-  const planFeatures = [
-    { plan:"free",  icon:"🔧", feats:["1 project","1 user","Local storage","All field modules"] },
-    { plan:"pro",   icon:"⚡", feats:["10 projects","5 members","Supabase sync","Priority support"] },
-    { plan:"team",  icon:"🏗",  feats:["Unlimited projects","25 members","Org management","White-label export"] },
-  ];
+  // Guest mode — local-only, no cloud sync, shows a banner inside the app
+  const handleGuest = () => {
+    const guestId = "guest-" + Math.random().toString(36).slice(2,10);
+    const profile = saveLocalProfile({
+      id: guestId, name: "Guest", email: null, org: "", isGuest: true, access_token: null
+    });
+    onDone(profile);
+  };
+
+  const submit = () => {
+    if(mode==="login")  handleLogin();
+    else if(mode==="signup") handleSignup();
+    else handleReset();
+  };
+
+  const IS = {width:"100%",padding:"10px 12px",background:"var(--input-bg)",border:"1px solid var(--border)",borderRadius:"6px",color:"var(--text)",fontFamily:"'Barlow',sans-serif",fontSize:"13px",outline:"none",boxSizing:"border-box",marginBottom:"12px"};
+  const LS = {fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.1em",display:"block",marginBottom:"5px"};
 
   return (
-    <>
-    <div style={{position:"fixed",inset:0,background:"var(--bg)",display:"flex",zIndex:950,animation:"fadeIn 0.3s"}}>
-      {/* LEFT — form panel */}
-      <div style={{flex:"0 0 min(480px,100%)",background:"var(--surface)",borderRight:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"auto",position:"relative"}}>
+    <div style={{position:"fixed",inset:0,background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:950,padding:"20px",animation:"fadeIn 0.3s",overflowY:"auto"}}>
+      <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:"14px",padding:"32px",width:"min(440px,100%)",position:"relative",overflow:"hidden",boxShadow:"0 20px 64px rgba(0,0,0,0.18)",margin:"auto"}}>
         <div style={{position:"absolute",top:0,left:0,right:0,height:"3px",background:"var(--gradient)"}}/>
-        <div style={{padding:"40px 40px 32px",flex:1}}>
-          {/* Logo */}
-          <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"36px"}}>
-            <div style={{width:"36px",height:"36px",background:"var(--accent)",borderRadius:"8px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",fontWeight:"900",color:"#fff",fontFamily:"'Bebas Neue',sans-serif"}}>⌘</div>
-            <div>
-              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"20px",letterSpacing:"0.08em",color:"var(--text)",lineHeight:1}}>Field Command</div>
-              <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",letterSpacing:"0.18em",textTransform:"uppercase"}}>Construction Intelligence Platform</div>
-            </div>
-          </div>
 
-          {form.inviteToken&&(
-            <div style={{background:"var(--green)15",border:"1px solid var(--green)44",borderRadius:"6px",padding:"10px 12px",marginBottom:"20px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--green)"}}>
-              🎫 Invite token detected — sign up to join your team
-            </div>
-          )}
-          {upgraded&&(
-            <div style={{background:"var(--accent)15",border:"1px solid var(--accent)44",borderRadius:"6px",padding:"10px 12px",marginBottom:"20px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--accent)"}}>
-              ✓ Payment successful — your {upgraded} plan is now active
-            </div>
-          )}
-
-          {/* Mode toggle */}
-          <div style={{display:"flex",background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"6px",padding:"3px",marginBottom:"28px"}}>
-            {["login","signup"].map(m=>(
-              <button key={m} onClick={()=>{setMode(m);setStep(1);setErr("");}}
-                style={{flex:1,background:mode===m?"var(--accent)":"none",border:"none",color:mode===m?"#fff":"var(--text3)",padding:"8px",fontFamily:"'Share Tech Mono',monospace",fontSize:"10px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.1em",borderRadius:"4px",cursor:"pointer",transition:"all 0.2s"}}>
-                {m==="login"?"Sign In":"Create Account"}
-              </button>
-            ))}
-          </div>
-
-          {mode==="login"&&(
-            <div>
-              <div style={{fontSize:"22px",fontWeight:"900",color:"var(--text)",marginBottom:"4px"}}>Welcome back</div>
-              <div style={{fontSize:"12px",color:"var(--text3)",marginBottom:"24px"}}>Sign in to your Field Command account</div>
-              <div className="field-group">
-                <label className="field-label">Email address</label>
-                <input className="field-input" type="email" placeholder="you@example.com" value={form.email}
-                  onChange={e=>up("email",e.target.value)} onKeyDown={e=>e.key==="Enter"&&doLogin()} autoFocus/>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Password</label>
-                <input className="field-input" type="password" placeholder="••••••••" value={form.password}
-                  onChange={e=>up("password",e.target.value)} onKeyDown={e=>e.key==="Enter"&&doLogin()}/>
-              </div>
-              {err&&<div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--red)",marginBottom:"12px"}}>{err}</div>}
-              <button className="btn-primary" style={{width:"100%",padding:"13px",fontSize:"11px",opacity:busy?0.6:1}} onClick={doLogin} disabled={busy}>
-                {busy?"Signing in…":"Sign In →"}
-              </button>
-              <button onClick={()=>{ try{localStorage.setItem("fcc_user",JSON.stringify({id:"guest",name:"Guest",email:"",role:"viewer",plan:"free",org:""}));}catch{}onAuth({id:"guest",name:"Guest",email:"",role:"viewer",plan:"free",org:""}); }}
-                style={{background:"none",border:"none",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",cursor:"pointer",width:"100%",marginTop:"10px",padding:"4px",textDecoration:"underline"}}>
-                Continue as guest (read-only)
-              </button>
-            </div>
-          )}
-
-          {mode==="signup"&&step===1&&(
-            <div>
-              <div style={{fontSize:"22px",fontWeight:"900",color:"var(--text)",marginBottom:"4px"}}>Create account</div>
-              <div style={{fontSize:"12px",color:"var(--text3)",marginBottom:"24px"}}>Step 1 of 2 — Your credentials</div>
-              <div className="field-group">
-                <label className="field-label">Full name</label>
-                <input className="field-input" placeholder="Susan A. Ochieng" value={form.name}
-                  onChange={e=>up("name",e.target.value)} autoFocus/>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Work email</label>
-                <input className="field-input" type="email" placeholder="you@firm.com" value={form.email}
-                  onChange={e=>up("email",e.target.value)}/>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Password (min 6 characters)</label>
-                <input className="field-input" type="password" placeholder="••••••••" value={form.password}
-                  onChange={e=>up("password",e.target.value)} onKeyDown={e=>e.key==="Enter"&&doSignupStep1()}/>
-              </div>
-              {err&&<div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--red)",marginBottom:"12px"}}>{err}</div>}
-              <button className="btn-primary" style={{width:"100%",padding:"13px",fontSize:"11px"}} onClick={doSignupStep1}>
-                Continue →
-              </button>
-            </div>
-          )}
-
-          {mode==="signup"&&step===2&&(
-            <div>
-              <div style={{fontSize:"22px",fontWeight:"900",color:"var(--text)",marginBottom:"4px"}}>Almost there</div>
-              <div style={{fontSize:"12px",color:"var(--text3)",marginBottom:"24px"}}>Step 2 of 2 — Your organisation</div>
-              <div className="field-group">
-                <label className="field-label">Organisation / Firm name</label>
-                <input className="field-input" placeholder="e.g. PMC Supervision Ltd" value={form.org}
-                  onChange={e=>up("org",e.target.value)} autoFocus/>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Your role</label>
-                <select className="field-select" value={form.role} onChange={e=>up("role",e.target.value)}>
-                  <option value="owner">Owner / Director</option>
-                  <option value="admin">Project Manager / RE</option>
-                  <option value="member">Engineer / Supervisor</option>
-                  <option value="viewer">Client / Stakeholder</option>
-                </select>
-              </div>
-              {form.inviteToken&&(
-                <div className="field-group">
-                  <label className="field-label">Invite token</label>
-                  <input className="field-input" value={form.inviteToken} onChange={e=>up("inviteToken",e.target.value)}/>
-                </div>
-              )}
-              {err&&<div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--red)",marginBottom:"12px"}}>{err}</div>}
-              <div style={{display:"flex",gap:"8px"}}>
-                <button className="btn-ghost" onClick={()=>{setStep(1);setErr("");}}>← Back</button>
-                <button className="btn-primary" style={{flex:1,padding:"13px",fontSize:"11px",opacity:busy?0.6:1}} onClick={doSignupStep2} disabled={busy}>
-                  {busy?"Creating account…":"Create Account ✓"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div style={{marginTop:"28px",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",lineHeight:1.6,textAlign:"center"}}>
-            By continuing you agree to the Field Command Terms of Service.<br/>
-            Your data stays on your device unless Supabase is configured.
+        {/* Logo */}
+        <div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"24px"}}>
+          <div style={{width:"42px",height:"42px",background:"var(--accent)",borderRadius:"10px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px",color:"#fff",flexShrink:0}}>⌘</div>
+          <div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"22px",letterSpacing:"0.08em",color:"var(--text)",lineHeight:1}}>Field Command Centre</div>
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",letterSpacing:"0.18em",textTransform:"uppercase"}}>Construction Intelligence Platform</div>
           </div>
         </div>
-      </div>
 
-      {/* RIGHT — pricing preview (hidden on small screens) */}
-      <div className="hide-mobile" style={{flex:1,background:"var(--bg)",padding:"40px",overflowY:"auto",display:"flex",flexDirection:"column",justifyContent:"center"}}>
-        <div style={{maxWidth:"420px",margin:"0 auto"}}>
-          <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.18em",marginBottom:"8px"}}>Pricing</div>
-          <div style={{fontSize:"28px",fontWeight:"900",color:"var(--text)",lineHeight:1.2,marginBottom:"8px"}}>FIELD COMMAND<br/><span style={{color:"var(--accent)"}}>FOR EVERY SITE.</span></div>
-          <div style={{fontSize:"12px",color:"var(--text3)",marginBottom:"28px",lineHeight:1.6}}>From solo REs to enterprise PMCs. All plans include all field modules — phases, work packages, diary, risks, provisions, and integrations.</div>
-          {planFeatures.map(({plan,icon,feats})=>{
-            const p = FCC_PLANS[plan];
-            return(
-              <div key={plan} style={{background:"var(--surface)",border:`1px solid ${plan==="pro"?"var(--accent)":"var(--border)"}`,borderRadius:"8px",padding:"16px",marginBottom:"10px",position:"relative",boxShadow:plan==="pro"?"0 0 0 3px var(--accent)22":"none"}}>
-                {plan==="pro"&&<div style={{position:"absolute",top:"-10px",right:"12px",background:"var(--accent)",color:"#fff",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",fontWeight:"700",padding:"2px 8px",borderRadius:"3px",letterSpacing:"0.1em"}}>MOST POPULAR</div>}
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
-                    <span style={{fontSize:"20px"}}>{icon}</span>
-                    <div>
-                      <div style={{fontSize:"14px",fontWeight:"900",color:"var(--text)"}}>{p.label}</div>
-                      <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:p.color}}>{p.projectLimit===99?"Unlimited":p.projectLimit} projects · {p.members===25?"25":p.members} member{p.members!==1?"s":""}</div>
-                    </div>
-                  </div>
-                  <div style={{textAlign:"right"}}>
-                    <div style={{fontSize:"20px",fontWeight:"900",color:p.color,lineHeight:1}}>{p.price===0?"Free":`KES ${p.price.toLocaleString()}`}</div>
-                    {p.price>0&&<div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)"}}>/ month</div>}
-                  </div>
-                </div>
-                <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
-                  {feats.map(f=><span key={f} style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"3px",padding:"2px 7px",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text3)"}}>{f}</span>)}
-                </div>
-                {plan!=="free"&&(
-                  <button onClick={()=>openPaymentCheckout(plan,p.price,form.email,setMpesaModal)}
-                    style={{marginTop:"10px",width:"100%",background:plan==="pro"?"var(--accent)":"var(--purple)",border:"none",color:"#fff",padding:"8px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.1em",borderRadius:"4px",cursor:"pointer"}}>
-                    📲 Lipa · KES {p.price.toLocaleString()}/mo →
-                  </button>
-                )}
-              </div>
-            );
-          })}
-          <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",marginTop:"16px",lineHeight:1.6,textAlign:"center"}}>
-            All plans start free · No credit card for Free tier<br/>Lipa Na M-Pesa · Paystack · Cancel anytime
+        {/* Free badge */}
+        <div style={{display:"flex",alignItems:"center",gap:"8px",background:"var(--green)12",border:"1px solid var(--green)33",borderRadius:"6px",padding:"8px 12px",marginBottom:"20px"}}>
+          <span style={{fontSize:"14px"}}>🎉</span>
+          <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--green)",lineHeight:1.5}}>
+            <strong>100% Free</strong> · All features unlocked · No credit card ever needed
           </div>
+        </div>
+
+        {/* Mode tabs */}
+        {mode !== "reset" && (
+          <div style={{display:"flex",gap:"2px",marginBottom:"20px",background:"var(--bg)",borderRadius:"6px",padding:"3px"}}>
+            {[["login","Sign In"],["signup","Create Account"]].map(([m,l])=>(
+              <button key={m} onClick={()=>{setMode(m);clear();}}
+                style={{flex:1,padding:"8px",border:"none",borderRadius:"4px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.08em",cursor:"pointer",transition:"all 0.15s",
+                  background:mode===m?"var(--card)":"transparent",
+                  color:mode===m?"var(--accent)":"var(--text4)",
+                  boxShadow:mode===m?"0 1px 4px rgba(0,0,0,0.1)":""
+                }}>{l}</button>
+            ))}
+          </div>
+        )}
+        {mode === "reset" && (
+          <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"10px",color:"var(--accent)",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:"16px"}}>
+            🔑 Reset Password
+          </div>
+        )}
+
+        {/* Alerts */}
+        {error && <div style={{background:"var(--red)15",border:"1px solid var(--red)44",borderRadius:"6px",padding:"10px 12px",marginBottom:"12px",fontSize:"11px",color:"var(--red)",fontFamily:"'Share Tech Mono',monospace"}}>{error}</div>}
+        {info  && <div style={{background:"var(--green)15",border:"1px solid var(--green)44",borderRadius:"6px",padding:"10px 12px",marginBottom:"12px",fontSize:"11px",color:"var(--green)",fontFamily:"'Share Tech Mono',monospace"}}>{info}</div>}
+
+        {/* Signup-only fields */}
+        {mode==="signup" && (
+          <>
+            <label style={LS}>Full Name</label>
+            <input style={IS} placeholder="e.g. James Otieno" value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()} autoFocus/>
+            <label style={LS}>Company / Organisation <span style={{color:"var(--text4)"}}>(optional)</span></label>
+            <input style={IS} placeholder="e.g. Ojola Construction Ltd" value={org} onChange={e=>setOrg(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()}/>
+          </>
+        )}
+
+        <label style={LS}>Email Address</label>
+        <input style={IS} type="email" placeholder="you@company.com" value={email}
+          onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()}
+          autoFocus={mode!=="signup"}/>
+
+        {mode !== "reset" && (
+          <>
+            <label style={LS}>Password</label>
+            <div style={{position:"relative",marginBottom:"12px"}}>
+              <input style={{...IS,marginBottom:0,paddingRight:"40px"}}
+                type={showPass?"text":"password"}
+                placeholder={mode==="signup"?"At least 6 characters":"Your password"}
+                value={password} onChange={e=>setPassword(e.target.value)}
+                onKeyDown={e=>e.key==="Enter"&&submit()}/>
+              <button onClick={()=>setShowPass(v=>!v)}
+                style={{position:"absolute",right:"10px",top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:"14px",padding:"0",lineHeight:1}}>
+                {showPass?"🙈":"👁"}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Primary CTA */}
+        <button className="btn-primary" style={{width:"100%",padding:"13px",fontSize:"11px",marginTop:"4px",opacity:loading?"0.6":"1"}}
+          onClick={submit} disabled={loading}>
+          {loading ? "⟳ Please wait…" : mode==="login" ? "Sign In →" : mode==="signup" ? "Create Free Account →" : "Send Reset Link →"}
+        </button>
+
+        {/* Secondary links */}
+        <div style={{display:"flex",justifyContent:"center",gap:"16px",marginTop:"10px"}}>
+          {mode==="login" && (
+            <button onClick={()=>{setMode("reset");clear();}}
+              style={{background:"none",border:"none",cursor:"pointer",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",textDecoration:"underline"}}>
+              Forgot password?
+            </button>
+          )}
+          {mode==="reset" && (
+            <button onClick={()=>{setMode("login");clear();}}
+              style={{background:"none",border:"none",cursor:"pointer",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",textDecoration:"underline"}}>
+              ← Back to Sign In
+            </button>
+          )}
+        </div>
+
+        {/* Divider */}
+        <div style={{display:"flex",alignItems:"center",gap:"10px",margin:"18px 0 14px"}}>
+          <div style={{flex:1,height:"1px",background:"var(--border)"}}/>
+          <span style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)"}}>OR</span>
+          <div style={{flex:1,height:"1px",background:"var(--border)"}}/>
+        </div>
+
+        {/* Guest mode */}
+        <button onClick={handleGuest}
+          style={{width:"100%",padding:"11px",background:"var(--bg)",border:"1px dashed var(--border2)",borderRadius:"6px",color:"var(--text3)",fontFamily:"'Share Tech Mono',monospace",fontSize:"10px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.08em",cursor:"pointer",transition:"all 0.15s"}}
+          onMouseEnter={e=>e.currentTarget.style.borderColor="var(--accent)"}
+          onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border2)"}>
+          👤 Continue as Guest
+        </button>
+        <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",textAlign:"center",marginTop:"6px",lineHeight:1.5}}>
+          Guest mode: data stays on this device only — no cloud sync
+        </div>
+
+        <div style={{marginTop:"16px",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",lineHeight:1.7,textAlign:"center",borderTop:"1px solid var(--border)",paddingTop:"12px"}}>
+          Signed-in data syncs securely across all your devices · Works offline
         </div>
       </div>
     </div>
-    {mpesaModal && (
-      <MpesaPayModal
-        plan={mpesaModal.plan}
-        amount={mpesaModal.amount}
-        userEmail={mpesaModal.userEmail||form.email}
-        onSuccess={(ref) => {
-          setMpesaModal(null);
-          // Store upgraded plan locally and reload
-          try {
-            const u = JSON.parse(localStorage.getItem("fcc_user")||"null");
-            if(u){ u.plan = mpesaModal.plan; localStorage.setItem("fcc_user", JSON.stringify(u)); }
-          }catch{}
-          window.location.href = window.location.pathname + "?upgraded=" + mpesaModal.plan;
-        }}
-        onClose={() => setMpesaModal(null)}
-      />
-    )}
+  );
+}
+
+/* ── PREMIUM / IN-APP PURCHASE PAYWALL MODAL ─────────────────────
+   Shows when a user tries to access a locked feature.
+   addonId: "sync" | "integrations" | "reports"
+   ──────────────────────────────────────────────────────────────── */
+function PremiumModal({ addonId, onClose, onUnlocked, userEmail="" }) {
+  const [mpesaModal, setMpesaModal] = React.useState(null);
+  const [addons, setAddons] = React.useState(getAddons);
+
+  const addon = IAP_ADDONS[addonId];
+  if(!addon) return null;
+
+  const purchased = !!addons[addonId];
+
+  const handleSuccess = (ref) => {
+    saveAddon(addonId);
+    setAddons(getAddons());
+    if(onUnlocked) onUnlocked(addonId);
+  };
+
+  if(purchased) {
+    // Already owned — just close
+    setTimeout(onClose, 50);
+    return null;
+  }
+
+  return (
+    <>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"var(--overlay)",zIndex:600,backdropFilter:"blur(3px)"}}/>
+      <div style={{
+        position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
+        width:"min(420px,94vw)",background:"var(--modal-bg)",
+        border:`1px solid ${addon.color}44`,borderRadius:"14px",zIndex:601,
+        boxShadow:"0 24px 64px rgba(0,0,0,0.3)",animation:"fadeUp 0.2s ease",overflow:"hidden"
+      }}>
+        {/* Gradient bar */}
+        <div style={{height:"3px",background:`linear-gradient(90deg,${addon.color},${addon.color}88)`}}/>
+
+        <div style={{padding:"24px"}}>
+          {/* Header */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"18px"}}>
+            <div>
+              <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:addon.color,textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:"4px"}}>
+                {addon.icon} Premium Add-on
+              </div>
+              <div style={{fontSize:"20px",fontWeight:"900",color:"var(--text)",lineHeight:1.1}}>{addon.label}</div>
+            </div>
+            <button onClick={onClose} style={{background:"none",border:"none",color:"var(--text3)",fontSize:"20px",cursor:"pointer",padding:"2px",lineHeight:1}}>✕</button>
+          </div>
+
+          {/* Price */}
+          <div style={{background:`${addon.color}10`,border:`1px solid ${addon.color}30`,borderRadius:"8px",padding:"14px 16px",marginBottom:"18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:"26px",fontWeight:"900",color:addon.color,lineHeight:1}}>KES {addon.price.toLocaleString()}</div>
+              <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",marginTop:"3px"}}>One-time unlock · All future updates included</div>
+            </div>
+            <div style={{fontSize:"32px"}}>{addon.icon}</div>
+          </div>
+
+          {/* Description */}
+          <div style={{fontSize:"12px",color:"var(--text2)",marginBottom:"14px",lineHeight:1.5}}>{addon.desc}</div>
+
+          {/* Features */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px",marginBottom:"20px"}}>
+            {addon.features.map((f,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:"6px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text2)"}}>
+                <span style={{color:addon.color,fontWeight:"900",flexShrink:0}}>✓</span>{f}
+              </div>
+            ))}
+          </div>
+
+          {/* Pay buttons */}
+          <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+            {/* M-Pesa */}
+            {FCC_CONFIG.mpesaRelayUrl ? (
+              <button onClick={()=>setMpesaModal({addonId,price:addon.price})}
+                style={{width:"100%",padding:"13px",background:"var(--green)",color:"#fff",border:"none",borderRadius:"6px",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",fontWeight:"800",textTransform:"uppercase",letterSpacing:"0.08em",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:"8px"}}>
+                📱 Lipa Na M-Pesa · KES {addon.price.toLocaleString()}
+              </button>
+            ) : (
+              <button onClick={()=>{
+                openPaystackCheckout(addonId, addon.price, userEmail, (ref)=>{
+                  handleSuccess(ref);
+                  onClose();
+                });
+              }}
+                style={{width:"100%",padding:"13px",background:addon.color,color:"#fff",border:"none",borderRadius:"6px",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",fontWeight:"800",textTransform:"uppercase",letterSpacing:"0.08em",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:"8px"}}>
+                💳 Pay with Card / M-Pesa · KES {addon.price.toLocaleString()}
+              </button>
+            )}
+
+            {/* Demo unlock (sandbox) */}
+            {FCC_CONFIG.mpesaEnv === "sandbox" && (
+              <button onClick={()=>{ saveAddon(addonId); setAddons(getAddons()); handleSuccess("DEMO"); onClose(); }}
+                style={{width:"100%",padding:"9px",background:"none",border:"1px dashed var(--border2)",color:"var(--text4)",borderRadius:"5px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",cursor:"pointer"}}>
+                🧪 Demo unlock (sandbox only)
+              </button>
+            )}
+          </div>
+
+          <div style={{marginTop:"12px",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",textAlign:"center",lineHeight:1.6}}>
+            🇰🇪 Powered by Safaricom Daraja &amp; Paystack · Secure one-time payment
+          </div>
+        </div>
+      </div>
+
+      {mpesaModal && (
+        <MpesaPayModal
+          plan={mpesaModal.addonId}
+          amount={mpesaModal.price}
+          userEmail={userEmail}
+          onSuccess={(ref)=>{ handleSuccess(ref); setMpesaModal(null); onClose(); }}
+          onClose={()=>setMpesaModal(null)}
+        />
+      )}
     </>
   );
 }
 
-/* ── ORG MANAGEMENT PANEL ──────────────────────────────────────── */
-function OrgPanel({ currentUser, onClose, onUpgrade, showToast }) {
+/* ── ACCOUNT & PREMIUM PANEL (replaces OrgPanel) ──────────────── */
+function AccountPanel({ profile, onClose, onProfileSaved, showToast }) {
   const [mpesaModal, setMpesaModal] = React.useState(null);
-  const [tab, setTab] = useState("members");
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("member");
-  const [members, setMembers] = useState(()=>{
-    try{ return JSON.parse(localStorage.getItem("fcc_org_members"))||[
-      { id: currentUser?.id||"u1", name: currentUser?.name||"You", email: currentUser?.email||"", role:"owner", status:"active", joined: new Date().toISOString().slice(0,10) }
-    ]; }catch{ return []; }
-  });
-  const [orgName, setOrgName] = useState(currentUser?.org||"My Organisation");
-  const plan = FCC_PLANS[currentUser?.plan||"free"];
-
-  const saveMembers = (m) => {
-    setMembers(m);
-    try{ localStorage.setItem("fcc_org_members", JSON.stringify(m)); }catch{}
-  };
-
-  const sendInvite = () => {
-    if(!inviteEmail.includes("@")){ showToast("⚠ Enter a valid email"); return; }
-    const planLimit = FCC_PLANS[currentUser?.plan||"free"].members;
-    if(members.length>=planLimit){ showToast(`⚠ Member limit (${planLimit}) reached on ${plan.label} plan`); return; }
-    const token = btoa(inviteEmail+":"+Date.now()).slice(0,16);
-    const newM = [...members, { id:"inv-"+Date.now(), name:inviteEmail.split("@")[0], email:inviteEmail, role:inviteRole, status:"invited", joined:"—", token }];
-    saveMembers(newM);
-    const link = `${window.location.href.split("?")[0]}?invite=${token}`;
-    navigator.clipboard.writeText(link).catch(()=>{});
-    showToast("✓ Invite link copied — " + inviteEmail);
-    setInviteEmail("");
-  };
+  const [tab, setTab] = useState("addons");
+  const [name, setName] = useState(profile?.name||"");
+  const [org,  setOrg]  = useState(profile?.org||"");
+  const [addons, setAddons] = useState(getAddons);
 
   const TABS = [
-    { id:"members", label:"Members" },
-    { id:"invite",  label:"Invite" },
-    { id:"billing", label:"Plan & Billing" },
-    { id:"settings",label:"Settings" },
+    { id:"addons",   label:"Premium Add-ons" },
+    { id:"profile",  label:"Profile" },
   ];
+
+  const refreshAddons = () => setAddons(getAddons());
 
   return (
     <>
       <div className="edit-overlay" onClick={onClose}/>
       <div className="edit-panel" style={{width:"min(520px,100vw)"}}>
+        {/* Header */}
         <div style={{padding:"20px 24px",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between",background:"var(--bg)",position:"sticky",top:0,zIndex:10}}>
           <div>
-            <div style={{fontSize:"14px",fontWeight:"900",color:"var(--text)"}}>{orgName}</div>
-            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--accent)",textTransform:"uppercase",letterSpacing:"0.1em"}}>{plan.label} Plan · {members.length}/{plan.members} members</div>
+            <div style={{fontSize:"14px",fontWeight:"900",color:"var(--text)"}}>{profile?.org||"Field Command Center"}</div>
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.1em",marginTop:"2px"}}>
+              {Object.keys(addons).length} of {Object.keys(IAP_ADDONS).length} add-ons active
+            </div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:"18px",padding:"4px"}}>✕</button>
         </div>
 
+        {/* Tabs */}
         <div style={{display:"flex",borderBottom:"1px solid var(--border)",background:"var(--bg)",overflowX:"auto",padding:"0 8px"}}>
           {TABS.map(t=>(
             <button key={t.id} className={`edit-tab ${tab===t.id?"active":""}`} onClick={()=>setTab(t.id)}>{t.label}</button>
@@ -4670,281 +5234,338 @@ function OrgPanel({ currentUser, onClose, onUpgrade, showToast }) {
 
         <div style={{flex:1,overflow:"auto",padding:"20px 24px"}}>
 
-          {tab==="members"&&(
+          {/* ── ADD-ONS TAB ── */}
+          {tab==="addons"&&(
             <div>
-              <div className="edit-section-title">Team Members ({members.length})</div>
-              {members.map(m=>(
-                <div key={m.id} style={{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"5px",marginBottom:"8px"}}>
-                  <div style={{width:"36px",height:"36px",borderRadius:"6px",background:"var(--accent)20",border:"1px solid var(--accent)44",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",fontWeight:"700",color:"var(--accent)",flexShrink:0}}>
-                    {(m.name||"?")[0].toUpperCase()}
+              <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--green)",lineHeight:1.6,marginBottom:"16px",background:"var(--green)10",border:"1px solid var(--green)33",borderRadius:"6px",padding:"10px 12px"}}>
+                🎉 <strong>All features are free</strong> during our launch phase — no payment required. Cloud sync, integrations, and reports are fully unlocked for every user.
+              </div>
+
+              {Object.values(IAP_ADDONS).map(addon=>{
+                const owned = !!addons[addon.id];
+                return (
+                  <div key={addon.id} style={{background:"var(--bg)",border:`1px solid ${owned?addon.color+"55":"var(--border)"}`,borderRadius:"8px",padding:"16px",marginBottom:"10px",position:"relative",overflow:"hidden"}}>
+                    {owned&&<div style={{position:"absolute",top:0,left:0,right:0,height:"2px",background:addon.color}}/>}
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"12px"}}>
+                      <div style={{flex:1}}>
+                        <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px"}}>
+                          <span style={{fontSize:"18px"}}>{addon.icon}</span>
+                          <div style={{fontSize:"13px",fontWeight:"800",color:"var(--text)"}}>{addon.label}</div>
+                          {owned&&<span style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",fontWeight:"700",color:addon.color,background:`${addon.color}18`,border:`1px solid ${addon.color}44`,padding:"1px 6px",borderRadius:"3px"}}>OWNED</span>}
+                        </div>
+                        <div style={{fontSize:"11px",color:"var(--text3)",lineHeight:1.5,marginBottom:"8px"}}>{addon.desc}</div>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:"4px"}}>
+                          {addon.features.map((f,i)=>(
+                            <span key={i} style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:owned?"var(--text2)":"var(--text4)",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"3px",padding:"2px 6px"}}>
+                              {owned?"✓ ":""}{f}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{flexShrink:0,textAlign:"right"}}>
+                        {owned ? (
+                          <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:addon.color,fontWeight:"700"}}>✓ Unlocked</div>
+                        ) : (
+                          <button
+                            onClick={()=>{
+                              if(FCC_CONFIG.mpesaRelayUrl){
+                                setMpesaModal({addonId:addon.id, price:addon.price});
+                              } else {
+                                openPaystackCheckout(addon.id, addon.price, profile?.email||"", (ref)=>{
+                                  saveAddon(addon.id); refreshAddons(); showToast(`✓ ${addon.label} unlocked!`);
+                                });
+                              }
+                            }}
+                            style={{background:addon.color,border:"none",color:"#fff",padding:"8px 14px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"800",textTransform:"uppercase",letterSpacing:"0.08em",borderRadius:"5px",cursor:"pointer",whiteSpace:"nowrap"}}>
+                            📲 KES {addon.price.toLocaleString()}
+                          </button>
+                        )}
+                        {!owned&&FCC_CONFIG.mpesaEnv==="sandbox"&&(
+                          <button onClick={()=>{ saveAddon(addon.id); refreshAddons(); showToast(`🧪 ${addon.label} demo unlocked`); }}
+                            style={{display:"block",marginTop:"6px",background:"none",border:"1px dashed var(--border)",color:"var(--text4)",padding:"4px 8px",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",borderRadius:"3px",cursor:"pointer",width:"100%"}}>
+                            Demo
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:"12px",fontWeight:"700",color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.name}</div>
-                    <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",marginTop:"1px"}}>{m.email}</div>
-                  </div>
-                  <div style={{flexShrink:0,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"3px"}}>
-                    <Badge label={m.role} color={m.role==="owner"?"var(--amber)":m.role==="admin"?"var(--accent)":"var(--text3)"}/>
-                    <Badge label={m.status} color={m.status==="active"?"var(--green)":"var(--text4)"}/>
-                  </div>
-                  {m.id!==currentUser?.id&&(
-                    <button className="btn-danger" style={{flexShrink:0}} onClick={()=>{saveMembers(members.filter(x=>x.id!==m.id));showToast("✓ Member removed");}}>Remove</button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
-          {tab==="invite"&&(
+          {/* ── PROFILE TAB ── */}
+          {tab==="profile"&&(
             <div>
-              <div className="edit-section-title">Invite Team Member</div>
-              <div style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"6px",padding:"12px",marginBottom:"14px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text3)",lineHeight:1.6}}>
-                Enter an email address — a unique invite link will be generated and copied to your clipboard. The recipient opens the link to create their account and join your org.
-              </div>
-              <div className="field-group">
-                <label className="field-label">Email address</label>
-                <input className="field-input" type="email" placeholder="colleague@firm.com" value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)}/>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Role</label>
-                <select className="field-select" value={inviteRole} onChange={e=>setInviteRole(e.target.value)}>
-                  {Object.entries(FCC_ROLES).filter(([k])=>k!=="owner").map(([k,v])=>(
-                    <option key={k} value={k}>{v.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div style={{display:"flex",gap:"6px",padding:"8px 10px",background:"var(--amber)10",border:"1px solid var(--amber)33",borderRadius:"5px",marginBottom:"14px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--amber)"}}>
-                <span>ℹ</span>
-                <span>{members.length}/{plan.members} members used on {plan.label} plan</span>
-              </div>
-              <button className="btn-primary" style={{width:"100%"}} onClick={sendInvite}>
-                📋 Generate &amp; Copy Invite Link
-              </button>
-            </div>
-          )}
-
-          {tab==="billing"&&(
-            <div>
-              <div className="edit-section-title">Current Plan</div>
-              <div style={{background:"var(--surface)",border:`2px solid ${plan.color}`,borderRadius:"8px",padding:"16px",marginBottom:"16px"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <div>
-                    <div style={{fontSize:"18px",fontWeight:"900",color:plan.color}}>{plan.label}</div>
-                    <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",marginTop:"2px"}}>{plan.projectLimit===99?"Unlimited":plan.projectLimit} projects · {plan.members} members</div>
-                  </div>
-                  <div style={{textAlign:"right"}}>
-                    <div style={{fontSize:"22px",fontWeight:"900",color:plan.color}}>{plan.price===0?"Free":`KES ${plan.price.toLocaleString()}/mo`}</div>
-                  </div>
-                </div>
-              </div>
-
-              {Object.entries(FCC_PLANS).filter(([k])=>k!==(currentUser?.plan||"free")).map(([k,p])=>(
-                <div key={k} style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"6px",padding:"12px",marginBottom:"8px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <div>
-                    <div style={{fontWeight:"700",color:"var(--text)",fontSize:"12px"}}>{p.label}</div>
-                    <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)"}}>{p.projectLimit===99?"Unlimited":p.projectLimit} projects · {p.members} members</div>
-                  </div>
-                  <button style={{background:p.color,border:"none",color:"#fff",padding:"7px 14px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.1em",borderRadius:"4px",cursor:"pointer"}}
-                    onClick={()=>{ if(p.price>0) openPaymentCheckout(k,p.price,currentUser?.email,setMpesaModal); }}>
-                    {p.price===0?"Downgrade":`📲 Lipa · KES ${p.price.toLocaleString()}/mo`}
-                  </button>
-                </div>
-              ))}
-
-              <div style={{marginTop:"12px",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",lineHeight:1.6}}>
-                🇰🇪 Lipa Na M-Pesa · Powered by Safaricom Daraja API<br/>
-                Paystack (cards + mobile money) also supported · Cancel anytime
-              </div>
-            </div>
-          )}
-
-          {tab==="settings"&&(
-            <div>
-              <div className="edit-section-title">Organisation Settings</div>
-              <div className="field-group">
-                <label className="field-label">Organisation name</label>
-                <input className="field-input" value={orgName} onChange={e=>setOrgName(e.target.value)}/>
-              </div>
+              <div className="edit-section-title">Your Profile</div>
               <div className="field-group">
                 <label className="field-label">Your name</label>
-                <input className="field-input" value={currentUser?.name||""} readOnly style={{opacity:0.6}}/>
+                <input className="field-input" value={name} onChange={e=>setName(e.target.value)} placeholder="Your full name"/>
               </div>
               <div className="field-group">
-                <label className="field-label">Email</label>
-                <input className="field-input" value={currentUser?.email||""} readOnly style={{opacity:0.6}}/>
+                <label className="field-label">Company / Organisation</label>
+                <input className="field-input" value={org} onChange={e=>setOrg(e.target.value)} placeholder="e.g. Ojola Construction Ltd"/>
               </div>
-              <div className="field-group">
-                <label className="field-label">Role</label>
-                <input className="field-input" value={FCC_ROLES[currentUser?.role||"viewer"]?.label||"—"} readOnly style={{opacity:0.6}}/>
-              </div>
-              <button className="btn-primary" style={{marginTop:"8px"}} onClick={()=>{try{localStorage.setItem("fcc_org_name",orgName);}catch{}showToast("✓ Settings saved");}}>
-                Save Settings
+              <button className="btn-primary" style={{marginTop:"4px"}} onClick={()=>{
+                const p = saveLocalProfile({name:name.trim(),org:org.trim()});
+                if(onProfileSaved) onProfileSaved(p);
+                showToast("✓ Profile saved");
+              }}>
+                Save Profile
               </button>
-              <div style={{marginTop:"24px",paddingTop:"16px",borderTop:"1px solid var(--border)"}}>
-                <div className="edit-section-title" style={{color:"var(--red)"}}>Danger Zone</div>
-                <button className="btn-danger" style={{width:"100%",marginTop:"4px"}} onClick={()=>{
-                  try{localStorage.removeItem("fcc_user");}catch{}
-                  showToast("Signed out");
+
+              <div style={{marginTop:"28px",paddingTop:"18px",borderTop:"1px solid var(--border)"}}>
+                <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",lineHeight:1.6,marginBottom:"10px"}}>
+                  Your data is stored locally on this device. Export a backup anytime from ⚡ Integrations → Backup.
+                </div>
+                <button className="btn-danger" style={{width:"100%"}} onClick={()=>{
+                  if(!confirm("Clear all local data and reset the app? This cannot be undone.")) return;
+                  try{
+                    ["ojola_profile","ojola_addons","ahp_projects","ahp_activeProject","ahp_theme","ahp_large","ahp_seenApp","fcc_tutorials_seen"].forEach(k=>localStorage.removeItem(k));
+                  }catch{}
+                  showToast("App reset — reloading…");
                   setTimeout(()=>window.location.reload(),800);
-                }}>Sign Out</button>
+                }}>
+                  Reset App &amp; Clear Data
+                </button>
               </div>
             </div>
           )}
 
         </div>
       </div>
+
+      {mpesaModal && (
+        <MpesaPayModal
+          plan={mpesaModal.addonId}
+          amount={mpesaModal.price}
+          userEmail={profile?.email||""}
+          onSuccess={(ref)=>{
+            saveAddon(mpesaModal.addonId);
+            refreshAddons();
+            setMpesaModal(null);
+            showToast(`✓ ${IAP_ADDONS[mpesaModal.addonId]?.label} unlocked!`);
+            onClose();
+          }}
+          onClose={()=>setMpesaModal(null)}
+        />
+      )}
     </>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════
-   SHARE SNAPSHOT MODAL
-   Encodes all project data into a URL-safe string.
-   Recipient opens the link and sees the full project.
-   ═══════════════════════════════════════════════════════════ */
-function ShareSnapshotModal({proj,diaries,materials,provisions,onClose,showToast}){
-  const [copied,setCopied]   = useState(false);
-  const [emailCopied,setEmailCopied] = useState(false);
-  const [waPhone,setWaPhone] = useState("");
-  const [showWaInput,setShowWaInput] = useState(false);
+/* ── PHOTO LIGHTBOX ──────────────────────────────────────────────
+   Opens a photo fullscreen with prev/next nav and caption.
+   Works with both HTTPS URLs (Supabase Storage) and base64.
+   ─────────────────────────────────────────────────────────────── */
+function PhotoLightbox({ photos, startIndex, onClose }) {
+  const [idx, setIdx] = useState(startIndex || 0);
+  const photo = photos[idx] || {};
+  const src   = photo.url || photo.src || "";
+  const total = photos.length;
 
-  // ── Build the snapshot URL ──────────────────────────────────────
-  const buildURL = () => {
-    try {
-      const payload = {
-        site:proj.site, phases:proj.phases, wps:proj.wps,
-        risks:proj.risks, snags:proj.snags, team:proj.team,
-        diaries:diaries||[], materials:materials||[],
-        provisions:provisions||{},
-        _shared:true, _sharedAt:new Date().toISOString()
-      };
-      const encoded = encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(payload)))));
-      const base = window.location.href.split("?")[0];
-      return `${base}?snap=${encoded}`;
-    } catch(e) { return window.location.href; }
+  // Keyboard navigation
+  React.useEffect(() => {
+    const handler = (e) => {
+      if(e.key === "Escape")      onClose();
+      if(e.key === "ArrowRight")  setIdx(i => Math.min(i + 1, total - 1));
+      if(e.key === "ArrowLeft")   setIdx(i => Math.max(i - 1, 0));
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [total]);
+
+  // Download / open in new tab helper
+  const openFull = () => {
+    if(!src) return;
+    if(src.startsWith("http")) {
+      window.open(src, "_blank");
+    } else {
+      // base64 — create a temporary anchor and trigger download
+      const a = document.createElement("a");
+      a.href  = src;
+      a.download = photo.caption ? `${photo.caption}.jpg` : `site-photo-${idx + 1}.jpg`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }
   };
 
-  const url = React.useMemo(buildURL, []);
-  const urlLen = url.length;
+  return (
+    <div onClick={onClose} style={{
+      position:"fixed", inset:0, background:"rgba(0,0,0,0.93)", zIndex:1200,
+      display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center"
+    }}>
+      {/* Top bar */}
+      <div onClick={e=>e.stopPropagation()} style={{
+        position:"absolute", top:0, left:0, right:0,
+        display:"flex", alignItems:"center", justifyContent:"space-between",
+        padding:"12px 16px", background:"rgba(0,0,0,0.6)"
+      }}>
+        <span style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"10px",color:"rgba(255,255,255,0.6)",letterSpacing:"0.1em"}}>
+          {idx + 1} / {total}{photo.caption ? ` · ${photo.caption}` : ""}
+        </span>
+        <div style={{display:"flex",gap:"8px"}}>
+          <button onClick={openFull} title="Open full size / download" style={{
+            background:"rgba(255,255,255,0.12)", border:"1px solid rgba(255,255,255,0.2)",
+            color:"#fff", borderRadius:"5px", padding:"5px 10px",
+            fontFamily:"'Share Tech Mono',monospace", fontSize:"9px", cursor:"pointer"
+          }}>
+            {src.startsWith("http") ? "🔗 Open" : "⬇ Download"}
+          </button>
+          <button onClick={onClose} style={{
+            background:"rgba(255,255,255,0.12)", border:"1px solid rgba(255,255,255,0.2)",
+            color:"#fff", borderRadius:"5px", padding:"5px 10px",
+            fontFamily:"'Share Tech Mono',monospace", fontSize:"9px", cursor:"pointer"
+          }}>✕ Close</button>
+        </div>
+      </div>
 
-  // WhatsApp safe limit ~2000 chars for the full wa.me?text= URL
-  const WA_LIMIT = 1800;
-  const MAIL_LIMIT = 1900;
-  const urlOk  = urlLen <= WA_LIMIT;
-  const mailOk = urlLen <= MAIL_LIMIT;
+      {/* Image */}
+      <img onClick={e=>e.stopPropagation()} src={src}
+        alt={photo.caption || `Photo ${idx + 1}`}
+        style={{
+          maxWidth:"calc(100vw - 32px)", maxHeight:"calc(100vh - 120px)",
+          objectFit:"contain", borderRadius:"6px",
+          boxShadow:"0 8px 48px rgba(0,0,0,0.5)"
+        }}
+      />
 
-  // Short message (link only) always fits
-  const shortWaText  = `FCC snapshot — ${proj.site?.name||"Project"}:\n${url}`;
-  const longWaText   = `Hi 👋 Here's the latest project snapshot for *${proj.site?.name||"our site"}*. Open this link to view all phases, work packages, risks and diary entries:\n\n${url}`;
-  const waText       = urlOk ? longWaText : shortWaText;
+      {/* Prev / Next arrows */}
+      {idx > 0 && (
+        <button onClick={e=>{e.stopPropagation();setIdx(i=>i-1);}} style={{
+          position:"absolute", left:"12px", top:"50%", transform:"translateY(-50%)",
+          background:"rgba(255,255,255,0.15)", border:"none", color:"#fff",
+          borderRadius:"50%", width:"44px", height:"44px", fontSize:"22px",
+          cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center"
+        }}>‹</button>
+      )}
+      {idx < total - 1 && (
+        <button onClick={e=>{e.stopPropagation();setIdx(i=>i+1);}} style={{
+          position:"absolute", right:"12px", top:"50%", transform:"translateY(-50%)",
+          background:"rgba(255,255,255,0.15)", border:"none", color:"#fff",
+          borderRadius:"50%", width:"44px", height:"44px", fontSize:"22px",
+          cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center"
+        }}>›</button>
+      )}
 
-  const emailSubject = `Project Snapshot — ${proj.site?.name||"Site"}`;
-  const emailBodyFull = `Hi,
+      {/* Thumbnail strip */}
+      {total > 1 && (
+        <div onClick={e=>e.stopPropagation()} style={{
+          position:"absolute", bottom:0, left:0, right:0,
+          display:"flex", gap:"6px", overflowX:"auto", padding:"10px 16px",
+          background:"rgba(0,0,0,0.6)", justifyContent:"center"
+        }}>
+          {photos.map((p, i) => (
+            <div key={i} onClick={()=>setIdx(i)} style={{
+              width:"48px", height:"48px", borderRadius:"4px", overflow:"hidden",
+              border: i === idx ? "2px solid var(--accent,#4299e1)" : "2px solid transparent",
+              flexShrink:0, cursor:"pointer", opacity: i === idx ? 1 : 0.6, transition:"all 0.15s"
+            }}>
+              <img src={p.url || p.src} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
-I'm sharing the latest project snapshot from Field Command Centre.
+/* ═══════════════════════════════════════════════════════════
+   SHARE SNAPSHOT MODAL  (v15 — short-link edition)
+   Saves payload to Supabase fcc_snapshots, returns 8-char ID.
+   Share link: <base>?share=<id>  (~40 chars, works anywhere)
+   ═══════════════════════════════════════════════════════════ */
+function ShareSnapshotModal({proj,diaries,materials,provisions,onClose,showToast,currentUserId}){
+  const [phase,    setPhase]    = useState("idle"); // idle | generating | done | error
+  const [shareId,  setShareId]  = useState(null);
+  const [copied,   setCopied]   = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
-Project: ${proj.site?.name||""}
-Location: ${proj.site?.location||""}
+  const shareUrl = shareId
+    ? `${window.location.href.split("?")[0]}?share=${shareId}`
+    : null;
 
-Open this link to view the full project data:
-${url}
+  // ── Build full payload (same as before) ──────────────────────
+  const buildPayload = () => ({
+    site:proj.site, phases:proj.phases, wps:proj.wps,
+    risks:proj.risks, snags:proj.snags, team:proj.team,
+    diaries:diaries||[], materials:materials||[],
+    provisions:provisions||{},
+    _shared:true, _sharedAt:new Date().toISOString()
+  });
 
-Regards`;
+  // ── Generate short link ───────────────────────────────────────
+  const generateLink = async () => {
+    setPhase("generating"); setErrorMsg("");
+    try {
+      const id = await sbSaveSnapshot(buildPayload(), currentUserId||null);
+      setShareId(id);
+      setPhase("done");
+      if(window.fccTrack) window.fccTrack("snapshot_saved",{id});
+    } catch(e) {
+      setErrorMsg(e.message || "Failed to generate link.");
+      setPhase("error");
+    }
+  };
 
-  // ── Copy helpers ────────────────────────────────────────────────
+  // ── Copy helpers ──────────────────────────────────────────────
   const doCopy = (text, onDone) => {
     const fallback = () => {
       const ta = document.createElement("textarea");
-      ta.value = text; document.body.appendChild(ta); ta.select();
-      try { document.execCommand("copy"); } catch{}
+      ta.value = text; ta.style.position="fixed"; ta.style.opacity="0";
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      try{ document.execCommand("copy"); }catch{}
       document.body.removeChild(ta);
       onDone();
     };
-    if(navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(onDone).catch(fallback);
-    } else { fallback(); }
+    if(navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(onDone).catch(fallback);
+    else fallback();
   };
 
   const copyLink = () => {
-    doCopy(url, () => {
+    if(!shareUrl) return;
+    doCopy(shareUrl, () => {
       setCopied(true);
-      showToast("✓ Link copied to clipboard");
-      if(window.fccTrack) window.fccTrack("snapshot_shared",{channel:"clipboard"});
-      setTimeout(() => setCopied(false), 2500);
+      showToast("✓ Link copied!");
+      setTimeout(()=>setCopied(false), 2500);
     });
   };
 
-  const copyEmailBody = () => {
-    doCopy(emailBodyFull, () => {
-      setEmailCopied(true);
-      showToast("✓ Email body copied — paste into your email client");
-      setTimeout(() => setEmailCopied(false), 3000);
-    });
-  };
-
-  // ── Share actions ───────────────────────────────────────────────
-
-  // Native share (mobile share sheet) — supports WhatsApp, Telegram, SMS etc.
-  const nativeShare = async () => {
-    if(!navigator.share) return false;
-    try {
-      await navigator.share({
-        title: `FCC Snapshot — ${proj.site?.name||"Project"}`,
-        text: `Field Command Centre project snapshot for ${proj.site?.name||"our site"}`,
-        url: url
-      });
-      if(window.fccTrack) window.fccTrack("snapshot_shared",{channel:"native"});
-      return true;
-    } catch(e) { return false; }
-  };
-
-  // WhatsApp — direct to number if provided, otherwise open chat picker
+  // ── Share actions (all synchronous window.open — no popup block) ──
   const shareWhatsApp = () => {
-    const phone = waPhone.replace(/\D/g,"");
-    const num = phone.startsWith("254") ? phone : phone.startsWith("0") ? "254"+phone.slice(1) : phone ? "254"+phone : "";
-    const text = encodeURIComponent(waText);
-    const waUrl = num
-      ? `https://wa.me/${num}?text=${text}`
-      : `https://wa.me/?text=${text}`;
-
-    if(urlOk) {
-      window.open(waUrl, "_blank");
-      if(window.fccTrack) window.fccTrack("snapshot_shared",{channel:"whatsapp"});
-      showToast("✓ Opening WhatsApp…");
-    } else {
-      // URL too long for wa.me — copy link and open WhatsApp separately
-      doCopy(url, () => {
-        showToast("✓ Link copied — paste it into WhatsApp");
-        const waBase = num ? `https://wa.me/${num}` : "https://wa.me/";
-        window.open(waBase, "_blank");
-        if(window.fccTrack) window.fccTrack("snapshot_shared",{channel:"whatsapp_manual"});
-      });
-    }
+    if(!shareUrl) return;
+    const text = encodeURIComponent(`📊 *${proj.site?.name||"Project"}* — Field Command Centre snapshot\n\nView it here: ${shareUrl}`);
+    const win = window.open(`https://wa.me/?text=${text}`, "_blank");
+    if(!win) { doCopy(shareUrl, () => showToast("✓ Copied — paste into WhatsApp")); }
+    else { showToast("✓ Opening WhatsApp…"); }
+    if(window.fccTrack) window.fccTrack("snapshot_shared",{channel:"whatsapp",id:shareId});
   };
 
-  // Email — try mailto first; fall back to copy if too long
   const shareEmail = () => {
-    if(mailOk) {
-      const href = `mailto:?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBodyFull)}`;
-      window.location.href = href;
-      if(window.fccTrack) window.fccTrack("snapshot_shared",{channel:"email"});
-    } else {
-      // mailto body too long — copy email body instead
-      copyEmailBody();
-    }
+    if(!shareUrl) return;
+    const subject = encodeURIComponent(`Project Snapshot — ${proj.site?.name||"Site"}`);
+    const body    = encodeURIComponent(`Hi,\n\nHere's the latest project snapshot from Field Command Centre.\n\nProject: ${proj.site?.name|""}\n\nView it here: ${shareUrl}\n\nRegards`);
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    if(window.fccTrack) window.fccTrack("snapshot_shared",{channel:"email",id:shareId});
   };
 
-  // SMS — works well on mobile
   const shareSMS = () => {
-    const smsBody = `FCC snapshot — ${proj.site?.name||"Project"}: ${url}`;
-    window.open(`sms:?body=${encodeURIComponent(smsBody)}`, "_blank");
-    if(window.fccTrack) window.fccTrack("snapshot_shared",{channel:"sms"});
+    if(!shareUrl) return;
+    window.open(`sms:?body=${encodeURIComponent(`FCC snapshot — ${proj.site?.name||"Project"}: ${shareUrl}`)}`, "_blank");
+    if(window.fccTrack) window.fccTrack("snapshot_shared",{channel:"sms",id:shareId});
   };
 
-  const hasNativeShare = !!navigator.share;
+  const nativeShare = () => {
+    if(!shareUrl || !navigator.share) return;
+    navigator.share({
+      title: `FCC — ${proj.site?.name||"Project"}`,
+      text:  "Field Command Centre project snapshot",
+      url:   shareUrl
+    }).catch(()=>{});
+    if(window.fccTrack) window.fccTrack("snapshot_shared",{channel:"native",id:shareId});
+  };
 
-  // URL size indicator
-  const sizeKB = (urlLen/1024).toFixed(1);
-  const sizeColor = urlLen > 2500 ? "var(--red)" : urlLen > 1500 ? "var(--orange,#dd6b20)" : "var(--green)";
+  // ── Styles ────────────────────────────────────────────────────
+  const btnCh = {display:"flex",alignItems:"center",justifyContent:"center",gap:"8px",padding:"11px 8px",background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"8px",color:"var(--text)",fontFamily:"'Share Tech Mono',monospace",fontSize:"10px",fontWeight:"700",cursor:"pointer",transition:"all 0.15s",flex:1};
 
   return(
     <>
@@ -4952,128 +5573,125 @@ Regards`;
       <div className="share-modal">
 
         {/* Header */}
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"16px"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"18px"}}>
           <div>
-            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"10px",color:"var(--accent)",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:"4px"}}>Share Project Snapshot</div>
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"10px",color:"var(--accent)",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:"4px"}}>Share Project</div>
             <div style={{fontSize:"13px",fontWeight:"700",color:"var(--text)"}}>{proj.site?.name||"Project"}</div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:"18px",padding:"2px"}}>✕</button>
         </div>
 
-        {/* URL box + copy */}
-        <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",marginBottom:"6px",textTransform:"uppercase",letterSpacing:"0.1em",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span>Snapshot Link</span>
-          <span style={{color:sizeColor,fontSize:"8px"}}>{sizeKB} KB · {urlLen.toLocaleString()} chars</span>
-        </div>
-        <div className="share-url-box">{url}</div>
-
-        <button className="btn-primary" style={{width:"100%",marginBottom:"14px"}} onClick={copyLink}>
-          {copied ? "✓ Copied!" : "📋 Copy Link"}
-        </button>
-
-        {/* Large project warning */}
-        {!urlOk && (
-          <div style={{background:"var(--orange,#dd6b20)15",border:"1px solid var(--orange,#dd6b20)44",borderRadius:"6px",padding:"9px 12px",marginBottom:"14px",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--orange,#dd6b20)",lineHeight:1.6}}>
-            ⚠ This project is large ({sizeKB} KB). WhatsApp and email links have a ~2 KB limit.
-            The app will copy the link to your clipboard so you can paste it manually.
+        {/* ── IDLE: Generate button ── */}
+        {phase==="idle" && (
+          <div style={{textAlign:"center",padding:"24px 0"}}>
+            <div style={{fontSize:"40px",marginBottom:"14px"}}>🔗</div>
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",color:"var(--text)",marginBottom:"8px",fontWeight:"700"}}>
+              Generate a unique shareable link
+            </div>
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",lineHeight:1.7,marginBottom:"20px"}}>
+              Creates a short link (e.g. <em>?share=ab3x7q2m</em>).<br/>
+              Works in WhatsApp, SMS, email — no file attachments needed.<br/>
+              Link is valid for <strong>90 days</strong>.
+            </div>
+            <button className="btn-primary" style={{padding:"13px 28px",fontSize:"11px"}} onClick={generateLink}>
+              Generate Link →
+            </button>
           </div>
         )}
 
-        {/* Share channels */}
-        <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"8px"}}>
-          Share via
-        </div>
-
-        {/* Native share (mobile) */}
-        {hasNativeShare && (
-          <button className="share-channel-btn" onClick={nativeShare}
-            style={{width:"100%",marginBottom:"8px",justifyContent:"center",padding:"11px"}}>
-            <span style={{fontSize:"16px"}}>📤</span>
-            <span>Share via Apps (WhatsApp · Telegram · SMS…)</span>
-          </button>
+        {/* ── GENERATING spinner ── */}
+        {phase==="generating" && (
+          <div style={{textAlign:"center",padding:"32px 0"}}>
+            <div style={{fontSize:"32px",animation:"spin 1s linear infinite",display:"inline-block"}}>⌘</div>
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"10px",color:"var(--text4)",marginTop:"14px",letterSpacing:"0.1em"}}>
+              Saving snapshot to cloud…
+            </div>
+          </div>
         )}
 
-        <div className="share-channels">
-
-          {/* WhatsApp */}
-          <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
-            <button className="share-channel-btn" onClick={shareWhatsApp}
-              style={{justifyContent:"center",padding:"10px 8px"}}>
-              <span style={{fontSize:"16px"}}>💬</span>
-              <span>WhatsApp</span>
-              {!urlOk && <span style={{fontSize:"8px",color:"var(--orange,#dd6b20)",marginLeft:"2px"}}>+copy</span>}
+        {/* ── ERROR state ── */}
+        {phase==="error" && (
+          <div style={{textAlign:"center",padding:"16px 0"}}>
+            <div style={{background:"var(--red)15",border:"1px solid var(--red)44",borderRadius:"8px",padding:"14px",marginBottom:"16px",fontFamily:"'Share Tech Mono',monospace",fontSize:"10px",color:"var(--red)",lineHeight:1.6}}>
+              ⚠ {errorMsg}
+            </div>
+            <button className="btn-primary" style={{padding:"11px 24px",fontSize:"10px"}} onClick={generateLink}>
+              Try Again
             </button>
-            <button onClick={()=>setShowWaInput(v=>!v)}
-              style={{background:"none",border:"none",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",cursor:"pointer",textAlign:"left",padding:"0 2px"}}>
-              {showWaInput ? "▲ hide number" : "▼ send to a number"}
-            </button>
-            {showWaInput && (
-              <input
-                type="tel"
-                placeholder="e.g. 0712 345 678"
-                value={waPhone}
-                onChange={e=>setWaPhone(e.target.value)}
-                style={{padding:"6px 8px",background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"4px",color:"var(--text)",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",outline:"none"}}
-              />
-            )}
           </div>
+        )}
 
-          {/* Email */}
-          <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
-            <button className="share-channel-btn" onClick={shareEmail}
-              style={{justifyContent:"center",padding:"10px 8px"}}>
-              <span style={{fontSize:"16px"}}>📧</span>
-              <span>{mailOk ? "Email" : "Copy Email"}</span>
-              {!mailOk && <span style={{fontSize:"8px",color:"var(--orange,#dd6b20)",marginLeft:"2px"}}>body</span>}
+        {/* ── DONE: show link + share buttons ── */}
+        {phase==="done" && shareUrl && (
+          <>
+            {/* Link display */}
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",marginBottom:"6px",textTransform:"uppercase",letterSpacing:"0.1em",display:"flex",justifyContent:"space-between"}}>
+              <span>Your Share Link</span>
+              <span style={{color:"var(--green)",fontSize:"8px"}}>✓ saved · valid 90 days</span>
+            </div>
+            <div style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"8px",padding:"12px 14px",fontFamily:"'Share Tech Mono',monospace",fontSize:"10px",color:"var(--text)",wordBreak:"break-all",lineHeight:1.5,marginBottom:"10px",userSelect:"all"}}>
+              {shareUrl}
+            </div>
+            <button className="btn-primary" style={{width:"100%",padding:"12px",marginBottom:"16px"}} onClick={copyLink}>
+              {copied ? "✓ Copied!" : "📋 Copy Link"}
             </button>
-            {!mailOk && (
-              <button onClick={copyEmailBody}
-                style={{background:"none",border:"none",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",cursor:"pointer",textAlign:"left",padding:"0 2px"}}>
-                {emailCopied ? "✓ copied!" : "▼ copy for webmail"}
+
+            {/* Share channels */}
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"8px"}}>
+              Share via
+            </div>
+
+            {navigator.share && (
+              <button style={{...btnCh,width:"100%",marginBottom:"8px",flex:"none"}} onClick={nativeShare}>
+                <span style={{fontSize:"16px"}}>📤</span>
+                <span>Share via Apps (WhatsApp · Telegram · SMS…)</span>
               </button>
             )}
-          </div>
 
-        </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"8px",marginBottom:"8px"}}>
+              <button style={btnCh} onClick={shareWhatsApp}
+                onMouseEnter={e=>e.currentTarget.style.borderColor="var(--accent)"}
+                onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
+                <span style={{fontSize:"18px"}}>💬</span>
+                <span>WhatsApp</span>
+              </button>
+              <button style={btnCh} onClick={shareEmail}
+                onMouseEnter={e=>e.currentTarget.style.borderColor="var(--accent)"}
+                onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
+                <span style={{fontSize:"18px"}}>📧</span>
+                <span>Email</span>
+              </button>
+              <button style={btnCh} onClick={shareSMS}
+                onMouseEnter={e=>e.currentTarget.style.borderColor="var(--accent)"}
+                onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
+                <span style={{fontSize:"18px"}}>📱</span>
+                <span>SMS</span>
+              </button>
+            </div>
 
-        {/* SMS row */}
-        <button className="share-channel-btn" onClick={shareSMS}
-          style={{width:"100%",marginTop:"8px",justifyContent:"center",padding:"9px"}}>
-          <span style={{fontSize:"16px"}}>📱</span>
-          <span>SMS / Text Message</span>
-        </button>
+            {/* Regenerate */}
+            <button onClick={()=>{setPhase("idle");setShareId(null);setCopied(false);}}
+              style={{background:"none",border:"none",cursor:"pointer",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",textDecoration:"underline",display:"block",margin:"4px auto 0",width:"100%",textAlign:"center"}}>
+              ↩ Generate a new link
+            </button>
 
-        {/* Included data chips */}
-        <div style={{marginTop:"14px",background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"5px",padding:"10px 12px"}}>
-          <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"5px"}}>What's included</div>
-          <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
-            {["Site Details","Phases","Work Packages","Risk Register","Snag List","Team","Site Diary","Materials","Provisions"].map(t=>(
-              <span key={t} style={{background:"var(--accent-bg)",border:"1px solid var(--accent)22",color:"var(--accent)",padding:"2px 7px",borderRadius:"3px",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px"}}>{t}</span>
-            ))}
-          </div>
-        </div>
+            {/* What's included chips */}
+            <div style={{marginTop:"14px",background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"6px",padding:"10px 12px"}}>
+              <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"5px"}}>What's included</div>
+              <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
+                {["Site Details","Phases","Work Packages","Risk Register","Snag List","Team","Site Diary","Materials","Provisions"].map(t=>(
+                  <span key={t} style={{background:"var(--accent-bg)",border:"1px solid var(--accent)22",color:"var(--accent)",padding:"2px 7px",borderRadius:"3px",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px"}}>{t}</span>
+                ))}
+              </div>
+            </div>
 
-        <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",marginTop:"10px",lineHeight:1.5}}>
-          ⚠ The link contains all project data. Only share with authorised team members.
-        </div>
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",marginTop:"10px",lineHeight:1.5}}>
+              ⚠ Only share with authorised team members — link opens the full project.
+            </div>
+          </>
+        )}
+
       </div>
-    {mpesaModal && (
-      <MpesaPayModal
-        plan={mpesaModal.plan}
-        amount={mpesaModal.amount}
-        userEmail={mpesaModal.userEmail||currentUser?.email}
-        onSuccess={(ref) => {
-          setMpesaModal(null);
-          try {
-            const u = JSON.parse(localStorage.getItem("fcc_user")||"null");
-            if(u){ u.plan = mpesaModal.plan; localStorage.setItem("fcc_user", JSON.stringify(u)); }
-          }catch{}
-          onClose();
-          window.location.href = window.location.pathname + "?upgraded=" + mpesaModal.plan;
-        }}
-        onClose={() => setMpesaModal(null)}
-      />
-    )}
     </>
   );
 }
@@ -5415,19 +6033,35 @@ function App(){
     persist("ahp_activeProject",0);
   }
 
-  // ── Registration state ─────────────────────────────────────────────────────
-  // ── Auth state ─────────────────────────────────────────────────────────────
-  // NOTE: If a snapshot is incoming (?snap=), we bypass auth + landing synchronously
-  //       so the recipient lands directly on the shared project — no blank screen.
-  const [showAuth,setShowAuth]=useState(()=>{
-    if(window.__FCC_SNAPSHOT__) return false; // snap links skip auth gate
-    try{return !JSON.parse(localStorage.getItem("fcc_user"));}catch{return true;}
-  });
-  const [currentUser,setCurrentUser]=useState(()=>{ try{return JSON.parse(localStorage.getItem("fcc_user"))||null;}catch{return null;} });
-  const [showOrgPanel,setShowOrgPanel]=useState(false);
-  const [upgradedBanner,setUpgradedBanner]=useState(()=>new URLSearchParams(window.location.search).get("upgraded")||null);
+  // ── Auth & Profile state ──────────────────────────────────────────────────
+  const [profile, setProfile] = useState(()=>getLocalProfile());
+  // Show auth screen if user has no email (never logged in with account)
+  const [showAuth, setShowAuth] = useState(()=>!getLocalProfile()?.email);
+  const [showProfileSetup, setShowProfileSetup] = useState(false); // legacy compat
+  const [showOrgPanel, setShowOrgPanel] = useState(false);
+  const [showPremium, setShowPremium] = useState(null); // addonId or null
+  const [addons, setAddons] = useState(getAddons);
+  const refreshAddons = () => setAddons(getAddons());
+  const currentUser = profile; // alias for legacy code
   const [isFirstVisit]=useState(()=>{ try{return !localStorage.getItem("fcc_tutorials_seen");}catch{return true;} });
-  const [showShare,setShowShare]=useState(false);
+
+  const handleAuthDone = (p) => {
+    setProfile(p);
+    setShowAuth(false);
+    // Queue cloud sync for after showToast is declared (avoids hooks ordering issue)
+    if(p?.id && !p.isGuest) window.__pendingCloudSync = p.id;
+  };
+
+  const handleLogout = () => {
+    // Wipe auth token; keep local project data and preferences
+    const cleaned = {...getLocalProfile()};
+    delete cleaned.email;
+    delete cleaned.access_token;
+    cleaned.isGuest = false;
+    saveLocalProfile(cleaned);
+    setProfile(getLocalProfile());
+    setShowAuth(true);
+  };
 
   // (snapshot toast fires after toast state is declared below)
 
@@ -5494,9 +6128,18 @@ function App(){
 
   const saveProj=(d)=>{
     const p=[...projects];
-    p[activeProject]={...p[activeProject],...d};
+    p[activeProject]={...p[activeProject],...d, _lastEditBy:profile?.id};
     setProjects(p);persist("ahp_projects",p);
     sbSaveProject(currentUser?.id, p[activeProject]);
+    // Broadcast live edit to teammates in this project
+    if(channelRef.current && hasAddon("sync")){
+      try{
+        channelRef.current.send({
+          type:"broadcast", event:"project_update",
+          payload:{ userId:profile?.id, userName:profile?.name||"User", data:{...d,_lastEditBy:profile?.id} }
+        });
+      }catch{}
+    }
   };
 
   useEffect(()=>{document.documentElement.setAttribute("data-theme",theme);persist("ahp_theme",theme);},[theme]);
@@ -5516,9 +6159,15 @@ function App(){
   const [showPin,setShowPin]   = useState(false);
   const [toast,setToast]       = useState("");
   const [showIntegration,setShowIntegration] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [online,setOnline]     = useState(()=>navigator.onLine);
   const [syncing,setSyncing]   = useState(false);
   const [lastSync,setLastSync] = useState(()=>load("ahp_lastSync")||null);
+  const [showMobileMenu,setShowMobileMenu] = useState(false);
+  // ── Realtime presence ────────────────────────────────────────────────────────
+  const [presenceUsers, setPresenceUsers] = useState([]); // other users in same project
+  const channelRef = useRef(null);
+  const sbClient = React.useMemo(()=>getSupabaseClient(),[]);
   // ── Inline cell editing ──────────────────────────────────────────────────────
   const [inlineEdit,setInlineEdit] = useState(null); // {wpId,col,val} | null
   const inlineRef = useRef(null);
@@ -5529,19 +6178,112 @@ function App(){
       setOnline(true);
       setSyncing(true);
       const ts=new Date().toISOString();
-      setTimeout(()=>{setLastSync(ts);persist("ahp_lastSync",ts);setSyncing(false);showToast("☁ Back online — data synced");},1400);
+      // Push local data to Supabase on reconnect
+      const syncOnReconnect = async () => {
+        try{
+          const localProjects = JSON.parse(localStorage.getItem("ahp_projects"))||[];
+          const localProfile = getLocalProfile();
+          for(const p of localProjects){
+            if(!p?.id) continue;
+            await sbFetch(`fcc_projects?id=eq.${p.id}`, {
+              method:"POST",
+              headers:{ "Prefer":"resolution=merge-duplicates" },
+              body: JSON.stringify({ id:p.id, owner_id:localProfile?.id, data:p, updated_at:ts })
+            }).catch(()=>{});
+          }
+        }catch{}
+        setLastSync(ts);persist("ahp_lastSync",ts);setSyncing(false);
+        showToast("☁ Back online — all changes synced to cloud");
+      };
+      syncOnReconnect();
     };
-    const goOffline=()=>{setOnline(false);showToast("📴 Offline — changes saved locally");};
+    const goOffline=()=>{setOnline(false);showToast("📴 Offline mode active — all changes saved locally");};
     window.addEventListener("online",goOnline);
     window.addEventListener("offline",goOffline);
     return()=>{window.removeEventListener("online",goOnline);window.removeEventListener("offline",goOffline);};
   },[]);
 
+  // ── Supabase realtime subscription + presence ────────────────────────────────
+  useEffect(()=>{
+    if(!sbClient || !hasAddon("sync") || !proj?.id) return;
+    // Remove old channel cleanly
+    if(channelRef.current){ try{sbClient.removeChannel(channelRef.current);}catch{} }
+    const channelName = `project:${proj.id}`;
+    const ch = sbClient.channel(channelName, {
+      config:{ presence:{ key: profile?.id || "anon" } }
+    });
+    // Presence — who else is in this project right now
+    ch.on("presence",{ event:"sync" },()=>{
+      try{
+        const state = ch.presenceState();
+        const all = Object.values(state).flat();
+        setPresenceUsers(all.filter(u=>u.userId && u.userId!==profile?.id).slice(0,5));
+      }catch{}
+    });
+    // Broadcast — live project edits from teammates
+    ch.on("broadcast",{ event:"project_update" },(msg)=>{
+      const payload = msg?.payload;
+      if(!payload || payload.userId===profile?.id) return;
+      setProjects(prev=>{
+        const p=[...prev];
+        p[activeProject]={ ...p[activeProject], ...payload.data };
+        try{localStorage.setItem("ahp_projects",JSON.stringify(p));}catch{}
+        return p;
+      });
+      showToast(`↓ ${payload.userName||"Teammate"} updated the project live`);
+    });
+    // Listen for DB changes (multi-device, not just same tab)
+    ch.on("postgres_changes",{ event:"UPDATE", schema:"public", table:"fcc_projects", filter:`id=eq.${proj.id}` },(change)=>{
+      const incoming = change?.new?.data;
+      if(!incoming || incoming._lastEditBy===profile?.id) return;
+      setProjects(prev=>{
+        const p=[...prev];
+        p[activeProject]={ ...p[activeProject], ...incoming };
+        try{localStorage.setItem("ahp_projects",JSON.stringify(p));}catch{}
+        return p;
+      });
+    });
+    ch.subscribe(async(status)=>{
+      if(status==="SUBSCRIBED"){
+        try{
+          await ch.track({ userId:profile?.id, userName:profile?.name||"User", view, joinedAt:new Date().toISOString() });
+        }catch{}
+      }
+    });
+    channelRef.current=ch;
+    return()=>{ try{sbClient.removeChannel(ch);}catch{} };
+  },[proj?.id, JSON.stringify(addons)]);
+
+  // Update presence when changing view
+  useEffect(()=>{
+    if(channelRef.current && hasAddon("sync")){
+      try{channelRef.current.track({ userId:profile?.id, userName:profile?.name||"User", view, joinedAt:new Date().toISOString() });}catch{}
+    }
+  },[view]);
+
   const manualSync=()=>{
-    if(!online){showToast("📴 Cannot sync — no connection");return;}
+    if(!online){showToast("📴 Offline — all changes saved locally, will sync when back online");return;}
     setSyncing(true);
     const ts=new Date().toISOString();
-    setTimeout(()=>{setLastSync(ts);persist("ahp_lastSync",ts);setSyncing(false);showToast("☁ Synced successfully");},1200);
+    // Also save to SW cache if available
+    if(window.__ojolaSWRegistration){
+      try{window.__ojolaSWRegistration.update().catch(()=>{});}catch{}
+    }
+    // Real Supabase sync — push current project to cloud
+    const doSync = async () => {
+      try{
+        if(sbClient && proj?.id){
+          await sbFetch(`fcc_projects?id=eq.${proj.id}`, {
+            method:"POST",
+            headers:{ "Prefer":"resolution=merge-duplicates" },
+            body: JSON.stringify({ id:proj.id, owner_id:profile?.id, data:proj, updated_at:ts })
+          });
+        }
+      }catch(e){ console.warn("[Ojola sync]", e.message); }
+      setLastSync(ts);persist("ahp_lastSync",ts);setSyncing(false);
+      showToast("☁ Synced to cloud — changes saved");
+    };
+    doSync();
   };
 
   const handleImport=(imported)=>{
@@ -5556,6 +6298,67 @@ function App(){
   useEffect(()=>{const t=setInterval(()=>setTime(new Date()),1000);return()=>clearInterval(t);},[]);
   const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
 
+  // ── Resolve ?share=<id> cloud snapshot ──────────────────────────────────────
+  useEffect(()=>{
+    const shareId = window.__FCC_SHARE_ID__;
+    if(!shareId) return;
+    window.__FCC_SHARE_ID__ = null;
+    const removeOverlay = () => { try{ document.getElementById('fcc-share-loader')?.remove(); }catch{} };
+    sbLoadSnapshot(shareId).then(payload => {
+      removeOverlay();
+      if(!payload){ showToast("⚠ Share link not found or has expired"); return; }
+      const snapProject = {
+        ...payload,
+        site: {...(payload.site||{}), name:`[Shared] ${payload.site?.name||"Project"}`},
+        _isSnapshot: true, _sharedAt: new Date().toISOString()
+      };
+      setProjects(prev => {
+        if(prev.some(p=>p.id===snapProject.id)) return prev;
+        const next = [...prev, snapProject];
+        persist("ahp_projects", next);
+        return next;
+      });
+      setActiveProject(projects.length); // point to the newly added project
+      showToast(`✓ Shared project loaded — ${payload.site?.name||"Project"}`);
+    }).catch(() => {
+      removeOverlay();
+      showToast("⚠ Could not load shared project — check your connection");
+    });
+  },[]);
+
+  // ── Cloud sync after login (deferred until showToast is available) ──────────
+  useEffect(()=>{
+    const uid = window.__pendingCloudSync;
+    if(uid){
+      window.__pendingCloudSync = null;
+      (async()=>{
+        if(!sbReady()) return;
+        try{
+          const cloudProjects = await sbLoadProjects(uid);
+          if(cloudProjects && cloudProjects.length > 0){
+            const localProjects = load("ahp_projects")||[];
+            const localIds = new Set(localProjects.map(p=>p.id).filter(Boolean));
+            const cloudOnly = cloudProjects.filter(p=>p.id && !localIds.has(p.id));
+            const merged = [...localProjects, ...cloudOnly];
+            if(cloudOnly.length > 0){
+              persist("ahp_projects", merged);
+              setProjects(merged);
+              showToast(`☁ ${cloudOnly.length} project(s) loaded from cloud`);
+            } else {
+              showToast("☁ Projects synced");
+            }
+          }
+        }catch(e){ console.warn("Cloud sync:", e.message); }
+      })();
+    }
+  },[]);
+
+  // ── Analytics: track user on boot / re-open ─────────────────────────────────
+  useEffect(()=>{
+    const p = getLocalProfile();
+    if(p?.id && !p.isGuest) sbTrackUser(p);
+  },[]);
+
   // ── Snapshot toast — notify recipient that shared project loaded ────────────
   useEffect(()=>{
     if(window.__FCC_SNAP_NAME__!==undefined){
@@ -5567,6 +6370,61 @@ function App(){
   },[]);
 
   const handleSave=d=>{saveProj(d);setShowEdit(false);showToast("✓ Dashboard updated");};
+
+  // ── WhatsApp "Send to Team" ──────────────────────────────────────────────────
+  const sendToTeam=()=>{
+    try{
+      // Build a lightweight snapshot (overview data only — keep URL short)
+      const snap={
+        site: proj.site,
+        phases: proj.phases?.map(ph=>({id:ph.id,name:ph.name,progress:ph.progress,status:ph.status,budget:ph.budget,spent:ph.spent})),
+        snags: proj.snags?.slice(0,10),
+        risks: proj.risks?.slice(0,10),
+        _snapBy: profile?.name||"Team",
+        _snapAt: new Date().toISOString(),
+      };
+      const encoded = encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(snap)))));
+      const baseUrl = window.location.href.split("?")[0];
+      const link = `${baseUrl}?snap=${encoded}`;
+      const spent = totalSpent||0;
+      const budget = totalBudget||0;
+      const pctBudget = budget>0?Math.round(spent/budget*100):0;
+      const lines = [
+        `*📊 ${proj.site?.name||"Project"} — Field Update*`,
+        ``,
+        `▸ Overall: *${totalProgress}%* complete`,
+        daysLeft!=null?`▸ Days left: *${daysLeft}*`:"",
+        `▸ Budget used: *${pctBudget}%* (KES ${(spent/1e6).toFixed(1)}M / ${(budget/1e6).toFixed(1)}M)`,
+        openRisks>0?`▸ Open risks: *${openRisks}*`:"▸ No open risks ✓",
+        blockedWPs>0?`▸ Blocked work pkgs: *${blockedWPs}*`:"",
+        ``,
+        `📱 View live snapshot:`,
+        link,
+        ``,
+        `_Sent from Field Command Center_`,
+      ].filter(Boolean).join("\n");
+      const waUrl = "https://wa.me/?text="+encodeURIComponent(lines);
+      // Must be synchronous — no await before window.open or browser blocks it as popup
+      const win = window.open(waUrl, "_blank");
+      if(win) {
+        showToast("✅ Opening WhatsApp…");
+      } else {
+        // Popup blocked — copy to clipboard using synchronous execCommand fallback
+        try {
+          const ta = document.createElement("textarea");
+          ta.value = lines; ta.style.position="fixed"; ta.style.opacity="0";
+          document.body.appendChild(ta); ta.focus(); ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+        } catch(copyErr) { /* silent */ }
+        showToast("✓ Message copied — open WhatsApp and paste");
+      }
+      if(window.fccTrack) window.fccTrack("whatsapp_send",{project:proj.site?.name||""});
+    }catch(e){
+      showToast("⚠ Could not open WhatsApp — try again");
+      console.warn("[sendToTeam]", e);
+    }
+  };
 
   // ── Inline edit helpers ──────────────────────────────────────────────────────
   // Auto-focus & select the input whenever a cell enters edit mode
@@ -5650,14 +6508,9 @@ function App(){
     {id:"payments",   label:"Payments",   icon:"💳"},
   ];
 
-  // ── If landing page is shown, render it and stop ──
-  // ── Gate 1: Auth ──
+  // ── Gate 1: Auth (Login / Sign Up) ──
   if(showAuth){
-    return <AuthScreen onAuth={user=>{
-      setCurrentUser(user);
-      setShowAuth(false);
-      if(window.fccTrack) window.fccTrack("app_first_launch",{user:user.email});
-    }}/>;
+    return <AuthScreen onDone={handleAuthDone}/>;
   }
 
   // ── Gate 2: Landing page ──
@@ -5665,19 +6518,46 @@ function App(){
     return <LandingPage theme={theme} setTheme={setTheme} largeText={largeText} setLargeText={setLargeText} onEnter={enterApp}/>;
   }
 
+  // ── Guest mode banner (shown inline at top of app) ──
+  const GuestBanner = profile?.isGuest ? (
+    <div style={{background:"var(--amber)14",borderBottom:"1px solid var(--amber)44",padding:"7px 16px",display:"flex",alignItems:"center",gap:"10px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--amber)",flexWrap:"wrap"}}>
+      <span style={{fontWeight:"800"}}>👤 GUEST MODE</span>
+      <span style={{color:"var(--text3)"}}>Data is saved locally on this device only — no cloud sync.</span>
+      <button onClick={handleLogout}
+        style={{marginLeft:"auto",background:"var(--amber)",color:"#fff",border:"none",borderRadius:"4px",padding:"4px 10px",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",fontWeight:"800",cursor:"pointer",textTransform:"uppercase",letterSpacing:"0.08em",flexShrink:0}}>
+        Create Free Account →
+      </button>
+    </div>
+  ) : null;
+
+  // Helper — trigger premium paywall for an add-on
+  const requireAddon = (addonId, onOwned) => {
+    if(hasAddon(addonId)){ onOwned(); return; }
+    setShowPremium(addonId);
+  };
+
   return(
     <div style={{minHeight:"100vh",background:"var(--bg)",fontFamily:"'Barlow',sans-serif",color:"var(--text)"}}>
+      {GuestBanner}
       {toast&&<div className="toast">{toast}</div>}
       <TutorialSystem currentView={view} isFirstVisit={isFirstVisit} onDismiss={()=>{}}/>
-      {upgradedBanner&&<div style={{position:"fixed",top:"62px",left:"50%",transform:"translateX(-50%)",background:"var(--accent)",color:"#fff",padding:"10px 20px",borderRadius:"6px",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",fontWeight:"700",zIndex:999,animation:"fadeUp 0.2s ease",boxShadow:"0 4px 16px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:"10px"}}>
-        ✓ Upgraded to {upgradedBanner.charAt(0).toUpperCase()+upgradedBanner.slice(1)} plan
-        <button onClick={()=>setUpgradedBanner(null)} style={{background:"none",border:"none",color:"#fff",cursor:"pointer",fontSize:"14px",padding:"0 0 0 4px"}}>✕</button>
-      </div>}
+
+      {/* Premium modal — disabled during free-for-all phase; setShowPremium calls are safe no-ops */}
+      {showPremium&&false&&(
+        <PremiumModal
+          addonId={showPremium}
+          userEmail={profile?.email||""}
+          onClose={()=>setShowPremium(null)}
+          onUnlocked={(id)=>{ refreshAddons(); setShowPremium(null); showToast(`✓ ${IAP_ADDONS[id]?.label} unlocked!`); }}
+        />
+      )}
+
       {showPin&&<PinLock onUnlock={()=>{setShowPin(false);setShowEdit(true);}}/>}
       {showEdit&&<EditPanel data={proj} onSave={handleSave} onClose={()=>setShowEdit(false)}/>}
       {showIntegration&&<IntegrationHub proj={proj} onImport={handleImport} onClose={()=>setShowIntegration(false)} showToast={showToast}/>}
-      {showShare&&<ShareSnapshotModal proj={proj} diaries={diaries} materials={materials} provisions={provisions} onClose={()=>setShowShare(false)} showToast={showToast}/>}
-      {showOrgPanel&&<OrgPanel currentUser={currentUser} onClose={()=>setShowOrgPanel(false)} onUpgrade={plan=>openStripeCheckout(plan,currentUser?.email)} showToast={showToast}/>}
+
+      {showOrgPanel&&<AccountPanel profile={profile} onClose={()=>setShowOrgPanel(false)} onProfileSaved={p=>setProfile(p)} showToast={showToast}/>}
+      {showShareModal&&<ShareSnapshotModal proj={proj} diaries={diaries} materials={materials} provisions={provisions} onClose={()=>setShowShareModal(false)} showToast={showToast} currentUserId={profile?.id||null}/>}
       {showNewProject&&<NewProjectWizard onCreate={p=>{const np=[...projects,p];setProjects(np);persist("ahp_projects",np);setActiveProject(np.length-1);setShowNewProject(false);showToast("✓ New project created");}} onCancel={()=>setShowNewProject(false)}/>}
 
       {/* PROJECT PICKER */}
@@ -5693,16 +6573,15 @@ function App(){
               </button>
             ))}
             {(()=>{
-              const planLimit=FCC_PLANS[currentUser?.plan||"free"].projectLimit;
-              const atLimit=projects.length>=planLimit;
+              const planLimit=99;
+              const atLimit=false;
               return(
                 <button className="btn-add"
-                  style={{opacity:atLimit?0.5:1,cursor:atLimit?"not-allowed":"pointer"}}
+                  style={{opacity:1,cursor:"pointer"}}
                   onClick={()=>{
-                    if(atLimit){showToast(`⚠ Plan limit: ${planLimit} project${planLimit!==1?"s":""} on ${FCC_PLANS[currentUser?.plan||"free"].label} plan — upgrade to add more`);return;}
                     setShowProjectPicker(false);setShowNewProject(true);
                   }}>
-                  + New Project ({projects.length}/{planLimit===99?"∞":planLimit})
+                  + New Project ({projects.length} total)
                 </button>
               );
             })()}
@@ -5710,14 +6589,151 @@ function App(){
         </>
       )}
 
+      {/* ── MOBILE DRAWER MENU ── */}
+      {showMobileMenu&&(
+        <>
+          <div className="mob-drawer-overlay" onClick={()=>setShowMobileMenu(false)}/>
+          <div className="mob-drawer">
+            <div className="mob-drawer-header">
+              <div className="mob-drawer-title">⌘ Field Command</div>
+              <button className="mob-drawer-close" onClick={()=>setShowMobileMenu(false)}>✕</button>
+            </div>
+            <div className="mob-drawer-body">
+
+              {/* Admin / Account */}
+              <div className="mob-drawer-section">
+                <div className="mob-drawer-section-label">👤 Account & Admin</div>
+                <button className="mob-drawer-btn admin" onClick={()=>{setShowMobileMenu(false);setShowOrgPanel(true);}}>
+                  <div style={{width:"32px",height:"32px",borderRadius:"50%",background:"var(--amber)20",border:"2px solid var(--amber)55",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Share Tech Mono',monospace",fontSize:"13px",fontWeight:"700",color:"var(--amber)",flexShrink:0}}>
+                    {(profile?.name||"?")[0].toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{fontSize:"11px",fontWeight:"700"}}>{profile?.name||"Set your name"}</div>
+                    <div style={{fontSize:"8px",opacity:0.8,marginTop:"1px"}}>{profile?.email ? `✓ ${profile.email}` : "Not signed in"} · Premium &amp; Account</div>
+                  </div>
+                  <span style={{marginLeft:"auto",fontSize:"12px"}}>›</span>
+                </button>
+                <button className="mob-drawer-btn" onClick={()=>{setShowMobileMenu(false);handleLogout();}}
+                  style={{color:"var(--red)",borderColor:"var(--red)33"}}>
+                  <span style={{fontSize:"16px"}}>🚪</span>
+                  <div><div style={{fontSize:"11px",fontWeight:"700"}}>Sign Out</div></div>
+                </button>
+              </div>
+
+              {/* Sync Status */}
+              <div className="mob-drawer-section">
+                <div className="mob-drawer-section-label">☁ Sync Status</div>
+                <button className={`mob-drawer-btn ${syncing?"":online?"sync-online":"sync-offline"}`} onClick={()=>{setShowMobileMenu(false);manualSync();}}>
+                  <span style={{fontSize:"16px"}}>{syncing?"⟳":online?"✓":"✗"}</span>
+                  <div>
+                    <div style={{fontSize:"11px",fontWeight:"700"}}>{syncing?"Syncing…":online?"Online — Tap to sync":"Offline"}</div>
+                    <div style={{fontSize:"8px",opacity:0.8,marginTop:"1px"}}>
+                      {lastSync?`Last sync: ${new Date(lastSync).toLocaleTimeString("en-KE",{hour12:false,hour:"2-digit",minute:"2-digit"})}`:"Never synced"}
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              {/* Tools */}
+              <div className="mob-drawer-section">
+                <div className="mob-drawer-section-label">🛠 Tools</div>
+                <button className="mob-drawer-btn" onClick={()=>{setShowMobileMenu(false); if(hasAddon("integrations")){ setShowIntegration(true); } else { setShowPremium("integrations"); }}}>
+                  <span style={{fontSize:"16px"}}>⚡</span>
+                  <div>
+                    <div style={{fontSize:"11px",fontWeight:"700"}}>Integrations {hasAddon("integrations")?"":"🔒"}</div>
+                    <div style={{fontSize:"8px",opacity:0.7,marginTop:"1px"}}>{hasAddon("integrations")?"Excel · P6 · Procore · Backup":"Unlock — KES "+IAP_ADDONS.integrations.price.toLocaleString()}</div>
+                  </div>
+                </button>
+                {/* Share Link */}
+                <button className="mob-drawer-btn" onClick={()=>{setShowMobileMenu(false);setShowShareModal(true);}}
+                  style={{borderColor:"var(--accent)44",background:"var(--accent)08"}}>
+                  <span style={{fontSize:"16px"}}>🔗</span>
+                  <div>
+                    <div style={{fontSize:"11px",fontWeight:"700",color:"var(--accent)"}}>Share Link</div>
+                    <div style={{fontSize:"8px",opacity:0.7,marginTop:"1px"}}>Generate a unique shareable link</div>
+                  </div>
+                </button>
+                {/* Live presence in drawer */}
+                {hasAddon("sync") && presenceUsers.length>0 && (
+                  <div style={{background:"var(--green)10",border:"1px solid var(--green)30",borderRadius:"8px",padding:"10px 12px",display:"flex",alignItems:"center",gap:"10px"}}>
+                    <div style={{display:"flex"}}>
+                      {presenceUsers.slice(0,3).map((u,i)=>(
+                        <div key={u.userId||i} style={{width:"28px",height:"28px",borderRadius:"50%",background:`hsl(${(u.userId||"x").charCodeAt(2)*7%360},60%,50%)`,border:"2px solid var(--surface)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",fontWeight:"700",color:"#fff",marginLeft:i>0?"-8px":"0"}}>
+                          {(u.userName||"?")[0].toUpperCase()}
+                        </div>
+                      ))}
+                    </div>
+                    <div>
+                      <div style={{fontSize:"10px",fontWeight:"700",color:"var(--green)"}}>🟢 {presenceUsers.length} teammate{presenceUsers.length>1?"s":""} live</div>
+                      <div style={{fontSize:"8px",opacity:0.7}}>{presenceUsers.map(u=>u.userName).join(", ")}</div>
+                    </div>
+                  </div>
+                )}
+                <button className="mob-drawer-btn" onClick={()=>{setShowMobileMenu(false);setShowPin(true);}}>
+                  <span style={{fontSize:"16px"}}>✏</span>
+                  <div>
+                    <div style={{fontSize:"11px",fontWeight:"700"}}>Edit Dashboard</div>
+                    <div style={{fontSize:"8px",opacity:0.7,marginTop:"1px"}}>Modify project data</div>
+                  </div>
+                </button>
+                <button className="mob-drawer-btn" onClick={()=>{setShowMobileMenu(false);goHome();}}>
+                  <span style={{fontSize:"16px"}}>⌘</span>
+                  <div>
+                    <div style={{fontSize:"11px",fontWeight:"700"}}>Home / Landing</div>
+                    <div style={{fontSize:"8px",opacity:0.7,marginTop:"1px"}}>Back to main screen</div>
+                  </div>
+                </button>
+              </div>
+
+              {/* Theme Picker */}
+              <div className="mob-drawer-section">
+                <div className="mob-drawer-section-label">🎨 Theme</div>
+                <div className="theme-row">
+                  {THEMES.map(t=>(
+                    <div key={t.id}
+                      onClick={()=>setTheme(t.id)}
+                      title={t.label+(t.outdoor?" ☀ Outdoor":"")}
+                      style={{
+                        width:"36px",height:"36px",borderRadius:"50%",cursor:"pointer",
+                        background:t.swatch,
+                        border:theme===t.id?"4px solid var(--text)":"3px solid transparent",
+                        outline:t.outdoor?"2px solid var(--amber)":"none",
+                        outlineOffset:"2px",
+                        boxShadow:theme===t.id?"0 0 0 2px var(--bg)":"none",
+                        transition:"all 0.15s",flexShrink:0
+                      }}/>
+                  ))}
+                </div>
+                <div style={{marginTop:"10px",display:"flex",gap:"8px",alignItems:"center"}}>
+                  <button onClick={()=>setLargeText(l=>!l)}
+                    style={{background:largeText?"var(--accent)":"var(--bg)",border:`2px solid ${largeText?"var(--accent)":"var(--border)"}`,color:largeText?"#fff":"var(--text3)",borderRadius:"6px",padding:"8px 16px",cursor:"pointer",fontFamily:"'Share Tech Mono',monospace",fontSize:"13px",fontWeight:"800",lineHeight:1,transition:"all 0.15s",flexShrink:0}}>
+                    A+
+                  </button>
+                  <span style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)"}}>
+                    {largeText?"Large text ON":"Normal text"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Clock */}
+              <div style={{padding:"10px 0",borderTop:"1px solid var(--border)",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",color:"var(--text3)",textAlign:"center"}}>
+                {time.toLocaleTimeString("en-KE",{hour12:false})} EAT
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* HEADER */}
-      <header style={{borderBottom:"1px solid var(--border)",padding:"0 16px",background:"var(--header-bg)",display:"flex",alignItems:"center",gap:"8px",height:"54px",position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",overflow:"visible",minWidth:0}}>        <button onClick={()=>setShowProjectPicker(s=>!s)} style={{display:"flex",alignItems:"center",gap:"10px",background:"none",border:"none",cursor:"pointer",paddingRight:"12px",borderRight:"1px solid var(--border)",marginRight:"4px",flexShrink:0,minWidth:0}}>
+      <header style={{borderBottom:"1px solid var(--border)",padding:"0 12px",background:"var(--header-bg)",display:"flex",alignItems:"center",gap:"8px",height:"54px",position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",overflow:"visible",minWidth:0}}>
+        {/* Project picker */}
+        <button onClick={()=>setShowProjectPicker(s=>!s)} style={{display:"flex",alignItems:"center",gap:"10px",background:"none",border:"none",cursor:"pointer",paddingRight:"12px",borderRight:"1px solid var(--border)",marginRight:"4px",flexShrink:0,minWidth:0}}>
           <div style={{display:"flex",flexDirection:"column",gap:"2px",flexShrink:0}}>
             <div style={{display:"flex",gap:"2px"}}>{["#E53E3E","#D69E2E","#38A169"].map((c,j)=><div key={j} style={{width:"7px",height:"7px",background:c,borderRadius:"1px",opacity:0.8}}/>)}</div>
             <div style={{display:"flex",gap:"2px"}}>{["#3182CE","#805AD5","#D69E2E"].map((c,j)=><div key={j} style={{width:"7px",height:"7px",background:c,borderRadius:"1px",opacity:0.8}}/>)}</div>
           </div>
           <div style={{textAlign:"left"}}>
-            <div style={{fontSize:"12px",fontWeight:"900",color:"var(--text)",letterSpacing:"0.05em",textTransform:"uppercase",lineHeight:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"160px"}}>{site.name?.split(" ").slice(0,3).join(" ")||"AHP"}</div>
+            <div style={{fontSize:"12px",fontWeight:"900",color:"var(--text)",letterSpacing:"0.05em",textTransform:"uppercase",lineHeight:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"140px"}}>{site.name?.split(" ").slice(0,3).join(" ")||"AHP"}</div>
             <div style={{fontSize:"8px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",letterSpacing:"0.08em",marginTop:"1px",whiteSpace:"nowrap"}}>▾ SWITCH PROJECT</div>
           </div>
         </button>
@@ -5729,10 +6745,11 @@ function App(){
           ))}
         </nav>
 
+        {/* RIGHT SIDE — desktop full controls */}
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"8px",flexShrink:0}}>
           <div className="hide-mobile" style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)"}}>{time.toLocaleTimeString("en-KE",{hour12:false})} EAT</div>
 
-          {/* SYNC STATUS */}
+          {/* SYNC STATUS — desktop */}
           <button className="sync-badge hide-mobile" onClick={manualSync} title={lastSync?`Last synced: ${new Date(lastSync).toLocaleTimeString()}`:"Never synced"}>
             <div className={`sync-dot ${syncing?"syncing":online?"online":"offline"}`}/>
             {syncing?<span className="sync-spin">⟳</span>:null}
@@ -5742,23 +6759,26 @@ function App(){
             {lastSync&&!syncing&&<span style={{color:"var(--text4)",fontSize:"8px"}}>{new Date(lastSync).toLocaleTimeString("en-KE",{hour12:false,hour:"2-digit",minute:"2-digit"})}</span>}
           </button>
 
-          {/* INTEGRATION HUB */}
-          <button onClick={()=>setShowIntegration(true)} title="Integration Hub" style={{background:"var(--purple)15",border:"1px solid var(--purple)44",color:"var(--purple)",padding:"6px 10px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.08em",borderRadius:"4px",cursor:"pointer",display:"flex",alignItems:"center",gap:"4px",transition:"all 0.15s",flexShrink:0}}>
-            <span>⚡</span><span className="hide-mobile">Integrations</span>
+          {/* MOBILE SYNC PILL — always visible on small screens */}
+          <div className="mob-sync-pill" onClick={manualSync} style={{cursor:"pointer"}}>
+            <div className={`sync-dot ${syncing?"syncing":online?"online":"offline"}`}/>
+            <span style={{color:syncing?"var(--amber)":online?"var(--green)":"var(--red)",fontWeight:"700",fontSize:"8px"}}>
+              {syncing?"…":online?"On":"Off"}
+            </span>
+          </div>
+
+          {/* INTEGRATION HUB — desktop only */}
+          <button onClick={()=>{ if(hasAddon("integrations")){ setShowIntegration(true); } else { setShowPremium("integrations"); } }} title="Integration Hub" style={{background:"var(--purple)15",border:"1px solid var(--purple)44",color:"var(--purple)",padding:"6px 10px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.08em",borderRadius:"4px",cursor:"pointer",display:"flex",alignItems:"center",gap:"4px",transition:"all 0.15s",flexShrink:0}} className="hide-mobile">
+            <span>⚡</span><span>{hasAddon("integrations")?"Integrations":"Integrations 🔒"}</span>
           </button>
 
-          {/* SHARE SNAPSHOT */}
-          <button onClick={()=>{setShowShare(true);if(window.fccTrack)window.fccTrack("share_opened",{project:proj?.site?.name||""}); }} title="Share project snapshot with your team" style={{background:"var(--green)15",border:"1px solid var(--green)44",color:"var(--green)",padding:"6px 10px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.08em",borderRadius:"4px",cursor:"pointer",display:"flex",alignItems:"center",gap:"4px",transition:"all 0.15s",flexShrink:0}}>
-            <span>🔗</span><span className="hide-mobile">Share</span>
-          </button>
-
-          {/* HOME BUTTON */}
-          <button className="app-home-btn" onClick={goHome} title="Back to Field Command Center landing page">
+          {/* HOME BUTTON — desktop only */}
+          <button className="app-home-btn hide-mobile" onClick={goHome} title="Back to Field Command Center landing page">
             ⌘ Home
           </button>
 
-          {/* THEME PICKER + LARGE TEXT */}
-          <div style={{display:"flex",gap:"4px",alignItems:"center",padding:"4px 8px",border:"1px solid var(--border)",borderRadius:"20px",background:"var(--bg)",flexWrap:"wrap"}}>
+          {/* THEME PICKER + LARGE TEXT — desktop only */}
+          <div className="hide-mobile" style={{display:"flex",gap:"4px",alignItems:"center",padding:"4px 8px",border:"1px solid var(--border)",borderRadius:"20px",background:"var(--bg)",flexWrap:"wrap"}}>
             {THEMES.map(t=>(
               <div key={t.id} className={`theme-swatch ${theme===t.id?"active":""}`}
                 title={t.label+(t.outdoor?" — Outdoor/Sunlight optimised":"")}
@@ -5793,22 +6813,58 @@ function App(){
             )}
           </div>
 
-          {/* USER PILL */}
-          <button onClick={()=>setShowOrgPanel(true)} title="Org & account settings"
-            style={{display:"flex",alignItems:"center",gap:"6px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"20px",padding:"4px 10px 4px 4px",cursor:"pointer",flexShrink:0,transition:"all 0.15s"}}
-            onMouseEnter={e=>e.currentTarget.style.borderColor="var(--accent)"}
-            onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
-            <div style={{width:"26px",height:"26px",borderRadius:"50%",background:"var(--accent)20",border:"2px solid var(--accent)55",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",fontWeight:"700",color:"var(--accent)",flexShrink:0}}>
-              {(currentUser?.name||"G")[0].toUpperCase()}
+          {/* USER PILL — desktop only */}
+          <div className="hide-mobile" style={{display:"flex",alignItems:"center",gap:"6px",flexShrink:0}}>
+            <button onClick={()=>setShowOrgPanel(true)} title="Account & Premium"
+              style={{display:"flex",alignItems:"center",gap:"6px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"20px",padding:"4px 10px 4px 4px",cursor:"pointer",transition:"all 0.15s"}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor="var(--accent)"}
+              onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
+              <div style={{width:"26px",height:"26px",borderRadius:"50%",background:"var(--accent)20",border:"2px solid var(--accent)55",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",fontWeight:"700",color:"var(--accent)",flexShrink:0}}>
+                {(profile?.name||"?")[0].toUpperCase()}
+              </div>
+              <div style={{textAlign:"left"}}>
+                <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",color:"var(--text)",lineHeight:1}}>{(profile?.name||"User").split(" ")[0]}</div>
+                <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:profile?.isGuest?"var(--amber)":profile?.email?"var(--green)":"var(--text4)",lineHeight:1,marginTop:"1px"}}>
+                  {profile?.isGuest ? "👤 Guest" : profile?.email ? "✓ Synced" : "local only"}
+                </div>
+              </div>
+            </button>
+            <button onClick={handleLogout} title="Sign out" style={{background:"none",border:"1px solid var(--border)",color:"var(--text4)",borderRadius:"5px",padding:"5px 8px",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",cursor:"pointer",textTransform:"uppercase",letterSpacing:"0.06em",transition:"all 0.15s",flexShrink:0}}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor="var(--red)";e.currentTarget.style.color="var(--red)";}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor="var(--border)";e.currentTarget.style.color="var(--text4)";}}>
+              Sign Out
+            </button>
+          </div>
+
+          {/* LIVE PRESENCE — show teammates currently in same project */}
+          {hasAddon("sync") && presenceUsers.length>0 && (
+            <div className="hide-mobile" title={`${presenceUsers.length} teammate${presenceUsers.length>1?"s":""} online: ${presenceUsers.map(u=>u.userName).join(", ")}`}
+              style={{display:"flex",alignItems:"center",gap:"-4px",cursor:"default"}}>
+              {presenceUsers.slice(0,3).map((u,i)=>(
+                <div key={u.userId||i} title={`${u.userName} · ${u.view||""}`}
+                  style={{width:"24px",height:"24px",borderRadius:"50%",background:`hsl(${(u.userId||"x").charCodeAt(2)*7%360},60%,50%)`,border:"2px solid var(--header-bg)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Share Tech Mono',monospace",fontSize:"10px",fontWeight:"700",color:"#fff",marginLeft:i>0?"-8px":"0",zIndex:3-i,flexShrink:0}}>
+                  {(u.userName||"?")[0].toUpperCase()}
+                </div>
+              ))}
+              <div style={{marginLeft:"4px",fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--green)",fontWeight:"700"}}>
+                {presenceUsers.length} live
+              </div>
             </div>
-            <div className="hide-mobile" style={{textAlign:"left"}}>
-              <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",color:"var(--text)",lineHeight:1}}>{(currentUser?.name||"Guest").split(" ")[0]}</div>
-              <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:FCC_PLANS[currentUser?.plan||"free"]?.color||"var(--text4)",lineHeight:1,marginTop:"1px"}}>{FCC_PLANS[currentUser?.plan||"free"]?.label||"Free"}</div>
-            </div>
+          )}
+
+          {/* SHARE LINK — generates short cloud link */}
+          <button onClick={()=>setShowShareModal(true)} title="Share project — generates a unique short link" className="hide-mobile"
+            style={{background:"var(--accent)15",border:"1px solid var(--accent)44",color:"var(--accent)",padding:"6px 10px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.08em",borderRadius:"4px",cursor:"pointer",display:"flex",alignItems:"center",gap:"4px",transition:"all 0.15s",flexShrink:0}}>
+            <span style={{fontSize:"12px"}}>🔗</span><span>Share Link</span>
           </button>
 
-          <button onClick={()=>setShowPin(true)} style={{background:"var(--amber)15",border:"1px solid var(--amber)44",color:"var(--amber)",padding:"6px 10px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.1em",borderRadius:"4px",cursor:"pointer"}}>
+          <button onClick={()=>setShowPin(true)} className="hide-mobile" style={{background:"var(--amber)15",border:"1px solid var(--amber)44",color:"var(--amber)",padding:"6px 10px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.1em",borderRadius:"4px",cursor:"pointer"}}>
             ✏
+          </button>
+
+          {/* HAMBURGER — mobile only, opens drawer */}
+          <button className="mob-menu-btn" onClick={()=>setShowMobileMenu(true)} title="Menu">
+            ☰
           </button>
         </div>
       </header>
@@ -6099,7 +7155,7 @@ function App(){
         )}
 
         {/* ── DIARY ── */}
-        {view==="diary"&&<DiaryView diaries={diaries} setDiaries={d=>{setDiaries(d);showToast("✓ Diary entry saved");}} team={team}/>}
+        {view==="diary"&&<DiaryView diaries={diaries} setDiaries={d=>{setDiaries(d);showToast("✓ Diary entry saved");}} team={team} currentUserId={profile?.id||null}/>}
 
         {/* ── RISKS ── */}
         {view==="risks"&&(
@@ -6196,19 +7252,34 @@ function App(){
         {view==="report"&&<REReport site={site} phases={phases} wps={wps} risks={risks} snags={snags} team={team} diaries={diaries} materials={materials}/>}
 
         {/* ── PAYMENTS ── */}
-        {view==="payments"&&<PaymentsView site={site}/>}
+        {view==="payments"&&(hasAddon("reports")
+          ? <PaymentsView site={site}/>
+          : <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"60vh",gap:"16px",textAlign:"center",padding:"24px"}}>
+              <div style={{fontSize:"48px"}}>💳</div>
+              <div style={{fontSize:"20px",fontWeight:"900",color:"var(--text)"}}>Payments &amp; RE Reports</div>
+              <div style={{fontSize:"13px",color:"var(--text3)",maxWidth:"360px",lineHeight:1.6}}>Request payments via M-Pesa or card, and generate professional RE Report PDFs. Unlock with the Reports add-on.</div>
+              <button className="btn-primary" style={{padding:"12px 28px",fontSize:"11px"}} onClick={()=>setShowPremium("reports")}>
+                📄 Unlock Reports &amp; Payments · KES {IAP_ADDONS.reports.price.toLocaleString()}
+              </button>
+            </div>
+        )}
 
       </main>
 
       {/* MOBILE BOTTOM NAV */}
       <nav className="mobile-nav">
-        <div className="mobile-nav-inner">
-          {NAV.map(({id,label,icon})=>(
-            <button key={id} className={`mob-nav-btn ${view===id?"active":""}`} onClick={()=>setView(id)}>
-              <span className="mob-nav-icon">{icon}</span>
-              <span style={{fontSize:"8px"}}>{label}</span>
-            </button>
-          ))}
+        {/* Scroll hint gradient on right edge */}
+        <div style={{position:"relative"}}>
+          <div className="mobile-nav-inner">
+            {NAV.map(({id,label,icon})=>(
+              <button key={id} className={`mob-nav-btn ${view===id?"active":""}`} onClick={()=>setView(id)}>
+                <span className="mob-nav-icon">{icon}</span>
+                <span style={{fontSize:"8px",letterSpacing:"0.04em"}}>{label}</span>
+              </button>
+            ))}
+          </div>
+          {/* Fade-right hint to indicate scrollable nav */}
+          <div style={{position:"absolute",right:0,top:0,bottom:0,width:"28px",background:"linear-gradient(to right,transparent,var(--header-bg))",pointerEvents:"none"}}/>
         </div>
       </nav>
     </div>
