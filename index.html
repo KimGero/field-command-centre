@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, viewport-fit=cover"/>
   <title>Mradi HQ — Field Command Centre</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700;800;900&family=Barlow:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
@@ -145,6 +145,9 @@ self.addEventListener('fetch', e => {
   <style>
     *{box-sizing:border-box;margin:0;padding:0;}
     html,body,#root{height:100%;}
+    html{max-width:100vw;overflow-x:hidden;}
+    body{max-width:100vw;overflow-x:hidden;}
+    #root{max-width:100vw;overflow-x:hidden;}
     ::-webkit-scrollbar{width:4px;height:4px;}
     ::-webkit-scrollbar-track{background:var(--bg);}
     ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
@@ -224,6 +227,9 @@ self.addEventListener('fetch', e => {
     .nav-btn{background:none;border:none;cursor:pointer;padding:8px 9px;font-family:'Share Tech Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:0.05em;border-radius:4px;transition:all 0.15s;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;}
     .nav-btn:hover{color:var(--text);background:var(--nav-active-bg);}
     .nav-btn.active{color:var(--accent);background:var(--nav-active-bg);border-bottom:2px solid var(--accent);font-weight:700;}
+    /* Desktop nav scroll: hide scrollbar but allow scroll */
+    .desktop-nav{scrollbar-width:none;-ms-overflow-style:none;}
+    .desktop-nav::-webkit-scrollbar{display:none;}
 
     .chip{background:var(--surface);border:1px solid var(--border);color:var(--text3);cursor:pointer;padding:5px 10px;font-family:'Share Tech Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.07em;border-radius:3px;transition:all 0.15s;}
     .chip:hover{background:var(--bg);color:var(--text);}
@@ -303,12 +309,12 @@ self.addEventListener('fetch', e => {
     .burn-bar-fill{height:100%;border-radius:4px;transition:width 0.8s ease;}
 
     /* MOBILE BOTTOM NAV */
-    .mobile-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--header-bg);border-top:1px solid var(--border);z-index:200;padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px);overflow:hidden;}
+    .mobile-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--header-bg);border-top:2px solid var(--border);z-index:200;padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px);overflow:hidden;}
     .mobile-nav-inner{display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
     .mobile-nav-inner::-webkit-scrollbar{display:none;}
-    .mob-nav-btn{flex:0 0 auto;background:none;border:none;cursor:pointer;padding:10px 16px;font-family:'Share Tech Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text4);display:flex;flex-direction:column;align-items:center;gap:3px;min-width:56px;overflow:hidden;}
-    .mob-nav-btn.active{color:var(--accent);}
-    .mob-nav-icon{font-size:18px;line-height:1;}
+    .mob-nav-btn{flex:1 0 auto;background:none;border:none;cursor:pointer;padding:10px 8px 8px;font-family:'Share Tech Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text4);display:flex;flex-direction:column;align-items:center;gap:4px;min-width:52px;max-width:80px;overflow:hidden;transition:background 0.15s;border-top:2px solid transparent;}
+    .mob-nav-btn.active{color:var(--accent);border-top-color:var(--accent);background:var(--nav-active-bg);}
+    .mob-nav-icon{font-size:20px;line-height:1;}
 
     /* ── MOBILE DRAWER MENU ── */
     .mob-drawer-overlay{position:fixed;inset:0;background:var(--overlay);z-index:350;animation:fadeIn 0.18s ease;}
@@ -338,6 +344,18 @@ self.addEventListener('fetch', e => {
     .mob-sync-pill{display:none;align-items:center;gap:5px;padding:4px 8px;border-radius:12px;border:1px solid var(--border);background:var(--bg);font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--text3);flex-shrink:0;}
     @media(max-width:768px){.mob-sync-pill{display:flex;}}
 
+    /* ── TABLET / SMALL-LAPTOP (769–1100px): declutter header so nav fits ── */
+    @media(min-width:769px) and (max-width:1100px){
+      /* shrink project picker label */
+      .nav-btn{font-size:8.5px;padding:7px 7px;max-width:100px;letter-spacing:0.03em;}
+      /* hide secondary header chrome that eats space */
+      .hide-tablet{display:none !important;}
+      /* let nav scroll freely when needed */
+      .desktop-nav{overflow-x:auto;flex:1 1 0;min-width:0;}
+      /* tighten right cluster */
+      header{gap:5px !important;padding:0 8px !important;}
+    }
+
     /* RESPONSIVE */
     /* ── GLOBAL ANDROID/MOBILE GUARDS ── */
     *{-webkit-tap-highlight-color:transparent;}
@@ -348,19 +366,19 @@ self.addEventListener('fetch', e => {
     @media(max-width:768px){
       .mobile-nav{display:block;}
       .desktop-nav{display:none !important;}
-      /* Larger, more comfortable bottom nav items */
-      .mob-nav-btn{padding:11px 14px;min-width:60px;font-size:8.5px;letter-spacing:0.04em;}
-      .mob-nav-icon{font-size:19px;}
+      /* Larger, finger-friendly bottom nav */
+      .mob-nav-btn{flex:1 0 auto;padding:12px 6px 10px;min-width:52px;font-size:9px;letter-spacing:0.03em;}
+      .mob-nav-icon{font-size:21px;}
       /* Safe-area-aware bottom padding (Android nav bar + bottom nav) */
-      main{padding:12px 12px calc(64px + env(safe-area-inset-bottom,0px)) 12px !important;}
+      main{padding:12px 12px calc(72px + env(safe-area-inset-bottom,0px)) 12px !important;}
       .page-grid-2{grid-template-columns:1fr !important;}
       .page-grid-3{grid-template-columns:1fr 1fr !important;}
       .page-grid-5{grid-template-columns:1fr 1fr !important;}
       .page-grid-4{grid-template-columns:1fr 1fr !important;}
       .gantt-label{width:80px !important;font-size:8px !important;}
       .hide-mobile{display:none !important;}
-      /* Header: stop flex children from overflowing on narrow screens */
-      header{overflow:hidden;padding:0 10px !important;}
+      /* Header: constrain to screen width, no overflow */
+      header{overflow:hidden;padding:0 10px !important;max-width:100vw;}
       header>*{flex-shrink:1;min-width:0;}
       /* Share modal: single column on mobile */
       .share-channels{grid-template-columns:1fr !important;}
@@ -389,11 +407,11 @@ self.addEventListener('fetch', e => {
       .page-grid-3{grid-template-columns:1fr !important;}
       .page-grid-4{grid-template-columns:1fr 1fr !important;}
       .page-grid-5{grid-template-columns:1fr 1fr !important;}
-      /* Larger tap targets on small Android phones (min 44px) */
-      .mob-nav-btn{min-width:44px;padding:10px 8px;font-size:7.5px;letter-spacing:0.03em;}
-      .mob-nav-icon{font-size:17px;}
+      /* Budget Android phones (Tecno, Neon, Itel etc.) — generous tap targets */
+      .mob-nav-btn{flex:1 0 auto;min-width:48px;padding:12px 4px 10px;font-size:8.5px;letter-spacing:0.02em;}
+      .mob-nav-icon{font-size:20px;}
       .nav-btn{padding:10px 6px;font-size:8.5px;letter-spacing:0.02em;}
-      button,select,input{min-height:36px;}
+      button,select,input{min-height:40px;}
       /* Tables: extra tight on very small screens */
       th{font-size:8px;padding:6px 8px;letter-spacing:0.06em;}
       td{font-size:9px;padding:7px 8px;}
@@ -6834,10 +6852,10 @@ function App(){
 
         {/* RIGHT SIDE — desktop full controls */}
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"8px",flexShrink:0}}>
-          <div className="hide-mobile" style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)"}}>{time.toLocaleTimeString("en-KE",{hour12:false})} EAT</div>
+          <div className="hide-mobile hide-tablet" style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)"}}>{time.toLocaleTimeString("en-KE",{hour12:false})} EAT</div>
 
           {/* SYNC STATUS — desktop */}
-          <button className="sync-badge hide-mobile" onClick={manualSync} title={lastSync?`Last synced: ${new Date(lastSync).toLocaleTimeString()}`:"Never synced"}>
+          <button className="sync-badge hide-mobile hide-tablet" onClick={manualSync} title={lastSync?`Last synced: ${new Date(lastSync).toLocaleTimeString()}`:"Never synced"}>
             <div className={`sync-dot ${syncing?"syncing":online?"online":"offline"}`}/>
             {syncing?<span className="sync-spin">⟳</span>:null}
             <span style={{color:syncing?"var(--amber)":online?"var(--green)":"var(--red)",fontWeight:"700"}}>
@@ -6855,17 +6873,17 @@ function App(){
           </div>
 
           {/* INTEGRATION HUB — desktop only */}
-          <button onClick={()=>{ if(hasAddon("integrations")){ setShowIntegration(true); } else { setShowPremium("integrations"); } }} title="Integration Hub" style={{background:"var(--purple)15",border:"1px solid var(--purple)44",color:"var(--purple)",padding:"6px 10px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.08em",borderRadius:"4px",cursor:"pointer",display:"flex",alignItems:"center",gap:"4px",transition:"all 0.15s",flexShrink:0}} className="hide-mobile">
+          <button onClick={()=>{ if(hasAddon("integrations")){ setShowIntegration(true); } else { setShowPremium("integrations"); } }} title="Integration Hub" style={{background:"var(--purple)15",border:"1px solid var(--purple)44",color:"var(--purple)",padding:"6px 10px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.08em",borderRadius:"4px",cursor:"pointer",display:"flex",alignItems:"center",gap:"4px",transition:"all 0.15s",flexShrink:0}} className="hide-mobile hide-tablet">
             <span>⚡</span><span>{hasAddon("integrations")?"Integrations":"Integrations 🔒"}</span>
           </button>
 
           {/* HOME BUTTON — desktop only */}
-          <button className="app-home-btn hide-mobile" onClick={goHome} title="Back to Mradi HQ landing page">
+          <button className="app-home-btn hide-mobile hide-tablet" onClick={goHome} title="Back to Mradi HQ landing page">
             ⌘ Home
           </button>
 
           {/* THEME PICKER + LARGE TEXT — desktop only */}
-          <div className="hide-mobile" style={{display:"flex",gap:"4px",alignItems:"center",padding:"4px 8px",border:"1px solid var(--border)",borderRadius:"20px",background:"var(--bg)",flexWrap:"wrap"}}>
+          <div className="hide-mobile hide-tablet" style={{display:"flex",gap:"4px",alignItems:"center",padding:"4px 8px",border:"1px solid var(--border)",borderRadius:"20px",background:"var(--bg)",flexWrap:"wrap"}}>
             {THEMES.map(t=>(
               <div key={t.id} className={`theme-swatch ${theme===t.id?"active":""}`}
                 title={t.label+(t.outdoor?" — Outdoor/Sunlight optimised":"")}
@@ -6901,7 +6919,7 @@ function App(){
           </div>
 
           {/* USER PILL — desktop only */}
-          <div className="hide-mobile" style={{display:"flex",alignItems:"center",gap:"6px",flexShrink:0}}>
+          <div className="hide-mobile hide-tablet" style={{display:"flex",alignItems:"center",gap:"6px",flexShrink:0}}>
             <button onClick={()=>setShowOrgPanel(true)} title="Account & Premium"
               style={{display:"flex",alignItems:"center",gap:"6px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"20px",padding:"4px 10px 4px 4px",cursor:"pointer",transition:"all 0.15s"}}
               onMouseEnter={e=>e.currentTarget.style.borderColor="var(--accent)"}
@@ -6925,7 +6943,7 @@ function App(){
 
           {/* LIVE PRESENCE — show teammates currently in same project */}
           {hasAddon("sync") && presenceUsers.length>0 && (
-            <div className="hide-mobile" title={`${presenceUsers.length} teammate${presenceUsers.length>1?"s":""} online: ${presenceUsers.map(u=>u.userName).join(", ")}`}
+            <div className="hide-mobile hide-tablet" title={`${presenceUsers.length} teammate${presenceUsers.length>1?"s":""} online: ${presenceUsers.map(u=>u.userName).join(", ")}`}
               style={{display:"flex",alignItems:"center",gap:"-4px",cursor:"default"}}>
               {presenceUsers.slice(0,3).map((u,i)=>(
                 <div key={u.userId||i} title={`${u.userName} · ${u.view||""}`}
@@ -6940,12 +6958,12 @@ function App(){
           )}
 
           {/* SHARE LINK — generates short cloud link */}
-          <button onClick={()=>setShowShareModal(true)} title="Share project — generates a unique short link" className="hide-mobile"
+          <button onClick={()=>setShowShareModal(true)} title="Share project — generates a unique short link" className="hide-mobile hide-tablet"
             style={{background:"var(--accent)15",border:"1px solid var(--accent)44",color:"var(--accent)",padding:"6px 10px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.08em",borderRadius:"4px",cursor:"pointer",display:"flex",alignItems:"center",gap:"4px",transition:"all 0.15s",flexShrink:0}}>
             <span style={{fontSize:"12px"}}>🔗</span><span>Share Link</span>
           </button>
 
-          <button onClick={()=>setShowPin(true)} className="hide-mobile" style={{background:"var(--amber)15",border:"1px solid var(--amber)44",color:"var(--amber)",padding:"6px 10px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.1em",borderRadius:"4px",cursor:"pointer"}}>
+          <button onClick={()=>setShowPin(true)} className="hide-mobile hide-tablet" style={{background:"var(--amber)15",border:"1px solid var(--amber)44",color:"var(--amber)",padding:"6px 10px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.1em",borderRadius:"4px",cursor:"pointer"}}>
             ✏
           </button>
 
