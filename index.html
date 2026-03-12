@@ -139,6 +139,16 @@ self.addEventListener('fetch', e => {
           overlay.innerHTML='<div style="font-size:32px;animation:spin 1s linear infinite">⌘</div><div style="font-size:11px;letter-spacing:0.15em;text-transform:uppercase">Loading shared project…</div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>';
           document.body.appendChild(overlay);
         }
+        // ?room=<projectId> — join a live team room
+        const roomId=params.get('room');
+        if(roomId && !snap && !shareId){
+          window.__FCC_ROOM_ID__ = roomId;
+          const overlay=document.createElement('div');
+          overlay.id='fcc-room-loader';
+          overlay.style.cssText='position:fixed;inset:0;background:#080812;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;font-family:monospace;color:#4A9EFF;gap:16px;';
+          overlay.innerHTML='<div style="font-size:36px;animation:spin 1s linear infinite">👥</div><div style="font-size:11px;letter-spacing:0.15em;text-transform:uppercase;color:#4A9EFF">Joining Team Room…</div><div style="font-size:9px;color:#666688;letter-spacing:0.1em">Connecting to live session</div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>';
+          document.body.appendChild(overlay);
+        }
       }catch(e){ /* ignore */ }
     })();
   </script>
@@ -489,6 +499,138 @@ self.addEventListener('fetch', e => {
       .no-print{display:none !important;}
       body{background:#fff !important;}
       .re-report-print{box-shadow:none !important;border:none !important;}
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       TEAM ROOM — Live collaboration panel
+    ══════════════════════════════════════════════════════════ */
+    .team-room-overlay{position:fixed;inset:0;z-index:400;pointer-events:none;}
+    .team-room-panel{
+      position:fixed;top:0;right:0;bottom:0;width:min(340px,100vw);
+      background:var(--modal-bg);border-left:1px solid var(--border);
+      z-index:401;display:flex;flex-direction:column;
+      box-shadow:-8px 0 40px rgba(0,0,0,0.22);
+      animation:slideIn 0.25s ease;
+      pointer-events:all;
+    }
+    @media(max-width:640px){
+      .team-room-panel{top:auto;right:0;left:0;bottom:0;width:100%;border-left:none;
+        border-top:1px solid var(--border);border-radius:18px 18px 0 0;max-height:88vh;
+        animation:slideUp 0.25s ease;}
+    }
+    .team-room-header{
+      display:flex;align-items:center;justify-content:space-between;
+      padding:14px 16px 12px;border-bottom:1px solid var(--border);
+      background:var(--modal-bg);position:sticky;top:0;z-index:1;flex-shrink:0;
+    }
+    .room-live-dot{
+      width:8px;height:8px;border-radius:50%;background:var(--green);
+      box-shadow:0 0 0 3px var(--green)30;animation:pulse2 2s infinite;
+      flex-shrink:0;
+    }
+    .member-row{
+      display:flex;align-items:center;gap:10px;padding:9px 16px;
+      border-radius:0;transition:background 0.12s;
+    }
+    .member-row:hover{background:var(--bg);}
+    .member-avatar{
+      width:32px;height:32px;border-radius:8px;
+      display:flex;align-items:center;justify-content:center;
+      font-family:'Share Tech Mono',monospace;font-size:12px;font-weight:800;
+      color:#fff;flex-shrink:0;position:relative;
+    }
+    .member-avatar-dot{
+      position:absolute;bottom:-2px;right:-2px;
+      width:9px;height:9px;border-radius:50%;
+      border:2px solid var(--modal-bg);
+    }
+    .chat-area{flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:6px;min-height:0;}
+    .chat-area::-webkit-scrollbar{width:3px;}
+    .chat-area::-webkit-scrollbar-thumb{background:var(--border);}
+    .chat-msg{
+      display:flex;flex-direction:column;gap:2px;
+      animation:fadeUp 0.15s ease;
+    }
+    .chat-msg.mine{align-items:flex-end;}
+    .chat-bubble{
+      max-width:82%;padding:8px 11px;border-radius:10px;
+      font-size:12px;color:var(--text);line-height:1.4;
+      background:var(--bg);border:1px solid var(--border);
+      word-break:break-word;
+    }
+    .chat-msg.mine .chat-bubble{
+      background:var(--accent)20;border-color:var(--accent)44;color:var(--text);
+    }
+    .chat-meta{
+      font-family:'Share Tech Mono',monospace;font-size:8px;
+      color:var(--text4);padding:0 2px;
+    }
+    .chat-input-row{
+      display:flex;gap:8px;padding:10px 14px;
+      border-top:1px solid var(--border);flex-shrink:0;background:var(--modal-bg);
+    }
+    .chat-input-field{
+      flex:1;background:var(--input-bg);border:1px solid var(--border);
+      color:var(--text);padding:9px 12px;font-family:'Barlow',sans-serif;
+      font-size:12px;border-radius:20px;outline:none;transition:border-color 0.15s;
+      min-height:38px;resize:none;overflow:hidden;line-height:1.4;
+    }
+    .chat-input-field:focus{border-color:var(--accent);}
+    .chat-send-btn{
+      width:38px;height:38px;border-radius:50%;background:var(--accent);
+      border:none;color:#fff;cursor:pointer;display:flex;align-items:center;
+      justify-content:center;font-size:14px;flex-shrink:0;transition:all 0.15s;
+    }
+    .chat-send-btn:hover{opacity:0.85;transform:scale(1.05);}
+    .chat-send-btn:disabled{background:var(--border);cursor:not-allowed;transform:none;}
+    .sync-mode-bar{
+      display:flex;gap:6px;padding:10px 14px;
+      border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg);
+    }
+    .sync-mode-btn{
+      flex:1;padding:7px 6px;border-radius:6px;border:1px solid var(--border);
+      background:var(--modal-bg);color:var(--text3);cursor:pointer;
+      font-family:'Share Tech Mono',monospace;font-size:8px;font-weight:700;
+      text-transform:uppercase;letter-spacing:0.05em;transition:all 0.15s;
+      display:flex;flex-direction:column;align-items:center;gap:2px;
+    }
+    .sync-mode-btn:hover{border-color:var(--accent);color:var(--text);}
+    .sync-mode-btn.active{background:var(--accent)18;border-color:var(--accent);color:var(--accent);}
+    .room-invite-box{
+      margin:10px 14px;padding:10px 12px;background:var(--bg);
+      border:1px solid var(--border);border-radius:8px;
+    }
+    .room-btn{
+      display:flex;align-items:center;gap:5px;padding:6px 12px;
+      background:var(--accent)18;border:1px solid var(--accent)44;color:var(--accent);
+      border-radius:5px;cursor:pointer;font-family:'Share Tech Mono',monospace;
+      font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;
+      transition:all 0.15s;white-space:nowrap;flex-shrink:0;
+    }
+    .room-btn:hover{background:var(--accent)30;}
+    .room-btn.green{background:var(--green)18;border-color:var(--green)44;color:var(--green);}
+    .room-btn.red{background:var(--red)18;border-color:var(--red)44;color:var(--red);}
+    /* Room indicator pill in header */
+    .room-pill{
+      display:flex;align-items:center;gap:5px;padding:4px 10px;
+      background:var(--green)15;border:1px solid var(--green)44;
+      border-radius:20px;cursor:pointer;font-family:'Share Tech Mono',monospace;
+      font-size:8px;font-weight:700;color:var(--green);transition:all 0.15s;
+      flex-shrink:0;white-space:nowrap;
+    }
+    .room-pill:hover{background:var(--green)25;}
+    .room-pill-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse2 2s infinite;}
+    .typing-indicator{
+      font-family:'Share Tech Mono',monospace;font-size:9px;
+      color:var(--text4);padding:4px 14px;height:22px;flex-shrink:0;
+    }
+    .chat-system-msg{
+      text-align:center;font-family:'Share Tech Mono',monospace;font-size:9px;
+      color:var(--text4);padding:6px 14px;background:var(--bg);
+      border-radius:20px;align-self:center;margin:2px 0;
+    }
+    @media(max-width:768px){
+      .room-pill span.room-pill-label{display:none;}
     }
 
     /* ── OUTDOOR / SUN-SAFE THEMES ── */
@@ -6120,6 +6262,267 @@ function TutorialSystem({ currentView, isFirstVisit, onDismiss }) {
   );
 }
 
+/* ══════════════════════════════════════════════════════════
+   TEAM ROOM PANEL — real-time collaboration for admin + team
+   ══════════════════════════════════════════════════════════ */
+function TeamRoomPanel({ proj, profile, channelRef, roomMembers, chatMessages, addChatMsg,
+  onClose, isAdmin, screenSyncMode, setScreenSyncMode, currentView, showToast }) {
+
+  const [chatInput, setChatInput] = React.useState("");
+  const [copying,   setCopying]   = React.useState(false);
+  const chatEndRef = React.useRef(null);
+
+  // Auto-scroll chat to bottom on new messages
+  React.useEffect(()=>{
+    chatEndRef.current?.scrollIntoView({ behavior:"smooth" });
+  },[chatMessages.length]);
+
+  const sendMsg = () => {
+    const txt = chatInput.trim();
+    if(!txt || !channelRef.current) return;
+    const msg = {
+      id:       "msg-" + Date.now(),
+      userId:   profile?.id   || "anon",
+      userName: profile?.name || "You",
+      text:     txt,
+      ts:       new Date().toISOString(),
+    };
+    // Optimistic local add
+    addChatMsg(msg);
+    // Broadcast to room
+    try {
+      channelRef.current.send({
+        type:"broadcast", event:"chat_msg", payload: msg
+      });
+    } catch(e) { /* offline */ }
+    setChatInput("");
+  };
+
+  const handleKeyDown = e => {
+    if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); sendMsg(); }
+  };
+
+  const copyRoomLink = () => {
+    const base = window.location.href.split("?")[0];
+    const link = `${base}?room=${encodeURIComponent(proj?.id || "main")}`;
+    if(navigator.clipboard){
+      navigator.clipboard.writeText(link).then(()=>{
+        setCopying(true); setTimeout(()=>setCopying(false), 1800);
+        showToast("✓ Room link copied — share it with your team!");
+      }).catch(()=>{ showToast("⚠ Could not copy — try manually"); });
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = link; ta.style.position="fixed"; ta.style.opacity="0";
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      try{ document.execCommand("copy"); showToast("✓ Room link copied!"); }catch{}
+      document.body.removeChild(ta);
+    }
+  };
+
+  const sendWhatsApp = () => {
+    const base = window.location.href.split("?")[0];
+    const link = `${base}?room=${encodeURIComponent(proj?.id || "main")}`;
+    const msg = `👥 *Join our live project room — ${proj?.site?.name || "Mradi HQ"}*\n\nI've opened a live team room. Click the link to join and see real-time updates:\n${link}\n\n_Sent from Mradi HQ_`;
+    const win = window.open("https://wa.me/?text="+encodeURIComponent(msg), "_blank");
+    if(!win) showToast("✓ WhatsApp link ready — if blocked, copy the room link instead");
+    else showToast("✅ Opening WhatsApp…");
+  };
+
+  const fmtTime = ts => {
+    try { return new Date(ts).toLocaleTimeString("en-KE",{hour:"2-digit",minute:"2-digit",hour12:true}); }
+    catch { return ""; }
+  };
+
+  const memberColors = ["#4A9EFF","#00D4AA","#FFB800","#FF6B35","#9B6DFF","#FF4444"];
+  const getColor = (userId) => memberColors[Math.abs((userId||"").charCodeAt(2)||0) % memberColors.length];
+
+  const SYNC_MODES = isAdmin
+    ? [
+        { id:"broadcast", icon:"📡", label:"Sync Screen", desc:"Team follows your view" },
+        { id:"free",      icon:"🔓", label:"Free Browse", desc:"Everyone navigates freely" },
+      ]
+    : [
+        { id:"follow",    icon:"👁", label:"Follow Admin", desc:"Auto-follow screen syncs" },
+        { id:"free",      icon:"🔓", label:"Free Browse",  desc:"Navigate independently" },
+      ];
+
+  return (
+    <>
+      {/* Click-away overlay — only on desktop (on mobile the panel slides up from bottom) */}
+      <div className="team-room-overlay" onClick={onClose} style={{background:"var(--overlay)",pointerEvents:"all"}}/>
+
+      <div className="team-room-panel">
+        {/* ── Header ── */}
+        <div className="team-room-header">
+          <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+            <div className="room-live-dot"/>
+            <div>
+              <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"10px",fontWeight:"800",color:"var(--accent)",textTransform:"uppercase",letterSpacing:"0.1em",lineHeight:1}}>
+                Team Room
+              </div>
+              <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",marginTop:"2px"}}>
+                {roomMembers.length + 1} member{roomMembers.length !== 0 ? "s" : ""} · {proj?.site?.name?.split(" ").slice(0,3).join(" ")||"Project"}
+              </div>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+            {isAdmin && (
+              <button className="room-btn" onClick={sendWhatsApp} title="Invite via WhatsApp">
+                <span>📲</span><span>Invite</span>
+              </button>
+            )}
+            <button onClick={onClose} style={{background:"none",border:"1px solid var(--border)",color:"var(--text3)",borderRadius:"5px",padding:"5px 8px",cursor:"pointer",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",lineHeight:1,transition:"all 0.15s"}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor="var(--red)"}
+              onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>✕</button>
+          </div>
+        </div>
+
+        {/* ── Invite box (admin only) ── */}
+        {isAdmin && (
+          <div className="room-invite-box">
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.09em",marginBottom:"7px"}}>🔗 Room Link — share with team</div>
+            <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+              <div style={{flex:1,background:"var(--input-bg)",border:"1px solid var(--border)",borderRadius:"5px",padding:"7px 10px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                {(window.location.href.split("?")[0])}?room={proj?.id||"main"}
+              </div>
+              <button className="room-btn" onClick={copyRoomLink} style={{flexShrink:0}}>
+                {copying ? "✓ Copied" : "📋 Copy"}
+              </button>
+            </div>
+            <div style={{marginTop:"7px",display:"flex",gap:"6px"}}>
+              <button className="room-btn green" style={{flex:1,justifyContent:"center"}} onClick={sendWhatsApp}>
+                📱 Send via WhatsApp
+              </button>
+              <button className="room-btn" style={{flex:1,justifyContent:"center"}} onClick={copyRoomLink}>
+                ✉ Copy for Email / SMS
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Screen Sync mode ── */}
+        <div style={{padding:"10px 14px 0",flexShrink:0}}>
+          <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.09em",marginBottom:"7px"}}>
+            {isAdmin ? "📡 Screen Broadcast" : "🖥 View Sync"}
+          </div>
+          <div className="sync-mode-bar" style={{padding:0,gap:"6px"}}>
+            {SYNC_MODES.map(m=>(
+              <button key={m.id} className={`sync-mode-btn ${screenSyncMode===m.id?"active":""}`}
+                onClick={()=>setScreenSyncMode(m.id)}>
+                <span style={{fontSize:"14px"}}>{m.icon}</span>
+                <span>{m.label}</span>
+              </button>
+            ))}
+          </div>
+          {isAdmin && screenSyncMode==="broadcast" && (
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--green)",padding:"5px 0 8px",textAlign:"center"}}>
+              ✓ Team will follow your screen · Currently showing: <strong>{currentView}</strong>
+            </div>
+          )}
+          {!isAdmin && screenSyncMode==="follow" && (
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--accent)",padding:"5px 0 8px",textAlign:"center"}}>
+              👁 Following admin screen — tap Free Browse to navigate
+            </div>
+          )}
+        </div>
+
+        {/* ── Who's here ── */}
+        <div style={{padding:"6px 14px 4px",flexShrink:0}}>
+          <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.09em",marginBottom:"4px"}}>
+            👷 In this room
+          </div>
+          {/* Self */}
+          <div className="member-row" style={{paddingLeft:0,paddingRight:0}}>
+            <div className="member-avatar" style={{background:getColor(profile?.id||"me")}}>
+              {(profile?.name||"You")[0].toUpperCase()}
+              <div className="member-avatar-dot" style={{background:"var(--green)"}}/>
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:"11px",fontWeight:"700",color:"var(--text)",lineHeight:1.2}}>
+                {profile?.name||"You"} <span style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--accent)"}}>({isAdmin?"Admin":"You"})</span>
+              </div>
+              <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)"}}>📍 {currentView}</div>
+            </div>
+            <div style={{width:"8px",height:"8px",borderRadius:"50%",background:"var(--green)",flexShrink:0}}/>
+          </div>
+          {/* Others */}
+          {roomMembers.length===0 && (
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",padding:"6px 0 4px",textAlign:"center",lineHeight:1.6}}>
+              No teammates yet.<br/>Share the room link to invite them.
+            </div>
+          )}
+          {roomMembers.map((m,i)=>(
+            <div key={m.userId||i} className="member-row" style={{paddingLeft:0,paddingRight:0}}>
+              <div className="member-avatar" style={{background:getColor(m.userId)}}>
+                {(m.userName||"?")[0].toUpperCase()}
+                <div className="member-avatar-dot" style={{background:"var(--green)"}}/>
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:"11px",fontWeight:"700",color:"var(--text)",lineHeight:1.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  {m.userName||"Teammate"}
+                </div>
+                <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)"}}>
+                  📍 {m.view||"overview"}{m.screenSyncMode==="follow"?" · 👁 Following":""}
+                </div>
+              </div>
+              <div style={{width:"8px",height:"8px",borderRadius:"50%",background:"var(--green)",flexShrink:0}}/>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Divider ── */}
+        <div style={{height:"1px",background:"var(--border)",margin:"6px 0",flexShrink:0}}/>
+
+        {/* ── Chat area ── */}
+        <div style={{padding:"0 14px 4px",flexShrink:0}}>
+          <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.09em"}}>
+            💬 Team Chat — live session
+          </div>
+        </div>
+        <div className="chat-area">
+          {chatMessages.length===0 && (
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",textAlign:"center",marginTop:"24px",lineHeight:1.8}}>
+              No messages yet.<br/>Say hello to your team 👋
+            </div>
+          )}
+          {chatMessages.map((m,i)=>{
+            const mine = m.userId===profile?.id;
+            const isSystem = m.type==="system";
+            if(isSystem) return <div key={m.id||i} className="chat-system-msg">{m.text}</div>;
+            return(
+              <div key={m.id||i} className={`chat-msg ${mine?"mine":""}`}>
+                {!mine&&(
+                  <div className="chat-meta">{m.userName||"Team"}</div>
+                )}
+                <div className="chat-bubble" style={{borderColor: mine?"var(--accent)44":"var(--border)"}}>
+                  {m.text}
+                </div>
+                <div className="chat-meta">{fmtTime(m.ts)}</div>
+              </div>
+            );
+          })}
+          <div ref={chatEndRef}/>
+        </div>
+
+        {/* ── Chat input ── */}
+        <div className="chat-input-row">
+          <textarea
+            className="chat-input-field"
+            placeholder="Message your team…"
+            value={chatInput}
+            rows={1}
+            onChange={e=>setChatInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+          />
+          <button className="chat-send-btn" onClick={sendMsg} disabled={!chatInput.trim()} title="Send (Enter)">
+            ➤
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function App(){
   const load=key=>{try{const v=localStorage.getItem(key);return v?JSON.parse(v):null;}catch{return null;}};
   const persist=(key,val)=>{try{localStorage.setItem(key,JSON.stringify(val));}catch{}};
@@ -6265,6 +6668,13 @@ function App(){
   const [toast,setToast]       = useState("");
   const [showIntegration,setShowIntegration] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  // ── Team Room state ──────────────────────────────────────────────────────────
+  const [showTeamRoom,   setShowTeamRoom]   = useState(()=>!!window.__FCC_ROOM_ID__);
+  const [roomMembers,    setRoomMembers]    = useState([]);  // other users in room
+  const [chatMessages,   setChatMessages]   = useState([]);  // live session chat
+  const [screenSyncMode, setScreenSyncMode] = useState("free"); // "broadcast"|"follow"|"free"
+  const [isRoomAdmin,    setIsRoomAdmin]    = useState(false);
+  const addChatMsg = msg => setChatMessages(prev=>[...prev, msg].slice(-200));
   const [online,setOnline]     = useState(()=>navigator.onLine);
   const [syncing,setSyncing]   = useState(false);
   const [lastSync,setLastSync] = useState(()=>load("ahp_lastSync")||null);
@@ -6310,19 +6720,21 @@ function App(){
 
   // ── Supabase realtime subscription + presence ────────────────────────────────
   useEffect(()=>{
-    if(!sbClient || !hasAddon("sync") || !proj?.id) return;
+    if(!sbClient || !proj?.id) return;
     // Remove old channel cleanly
     if(channelRef.current){ try{sbClient.removeChannel(channelRef.current);}catch{} }
     const channelName = `project:${proj.id}`;
     const ch = sbClient.channel(channelName, {
       config:{ presence:{ key: profile?.id || "anon" } }
     });
-    // Presence — who else is in this project right now
+    // Presence — who else is in this project / room right now
     ch.on("presence",{ event:"sync" },()=>{
       try{
         const state = ch.presenceState();
         const all = Object.values(state).flat();
-        setPresenceUsers(all.filter(u=>u.userId && u.userId!==profile?.id).slice(0,5));
+        const others = all.filter(u=>u.userId && u.userId!==profile?.id).slice(0,10);
+        setPresenceUsers(others.slice(0,5));
+        setRoomMembers(others);
       }catch{}
     });
     // Broadcast — live project edits from teammates
@@ -6336,6 +6748,40 @@ function App(){
         return p;
       });
       showToast(`↓ ${payload.userName||"Teammate"} updated the project live`);
+    });
+    // ── Screen sync — admin broadcasts view; followers update their view ──────
+    ch.on("broadcast",{ event:"screen_sync" },(msg)=>{
+      const payload = msg?.payload;
+      if(!payload || payload.userId===profile?.id) return;
+      // Only follow if member is in "follow" mode AND sender is admin
+      setScreenSyncMode(prev=>{
+        if(prev==="follow"){
+          setView(payload.view);
+          // Subtle toast so member knows screen was synced
+          showToast(`📡 Screen synced → ${payload.view} by ${payload.userName||"Admin"}`);
+        }
+        return prev;
+      });
+    });
+    // ── Chat messages ────────────────────────────────────────────────────────
+    ch.on("broadcast",{ event:"chat_msg" },(msg)=>{
+      const payload = msg?.payload;
+      if(!payload || payload.userId===profile?.id) return;
+      addChatMsg(payload);
+    });
+    // ── Member joined/left notifications ────────────────────────────────────
+    ch.on("presence",{ event:"join" },(payload)=>{
+      const joined = payload?.newPresences?.[0];
+      if(joined && joined.userId && joined.userId!==profile?.id){
+        addChatMsg({ id:"sys-"+Date.now(), type:"system", text:`👋 ${joined.userName||"Teammate"} joined the room` });
+        showToast(`👋 ${joined.userName||"Teammate"} joined the room`);
+      }
+    });
+    ch.on("presence",{ event:"leave" },(payload)=>{
+      const left = payload?.leftPresences?.[0];
+      if(left && left.userId && left.userId!==profile?.id){
+        addChatMsg({ id:"sys-"+Date.now(), type:"system", text:`👋 ${left.userName||"Teammate"} left the room` });
+      }
     });
     // Listen for DB changes (multi-device, not just same tab)
     ch.on("postgres_changes",{ event:"UPDATE", schema:"public", table:"fcc_projects", filter:`id=eq.${proj.id}` },(change)=>{
@@ -6351,18 +6797,43 @@ function App(){
     ch.subscribe(async(status)=>{
       if(status==="SUBSCRIBED"){
         try{
-          await ch.track({ userId:profile?.id, userName:profile?.name||"User", view, joinedAt:new Date().toISOString() });
+          await ch.track({
+            userId:    profile?.id,
+            userName:  profile?.name||"User",
+            view,
+            isAdmin:   isRoomAdmin,
+            screenSyncMode,
+            joinedAt:  new Date().toISOString()
+          });
         }catch{}
       }
     });
     channelRef.current=ch;
     return()=>{ try{sbClient.removeChannel(ch);}catch{} };
-  },[proj?.id, JSON.stringify(addons)]);
+  },[proj?.id]);
 
-  // Update presence when changing view
+  // Update presence + broadcast screen sync when changing view
   useEffect(()=>{
-    if(channelRef.current && hasAddon("sync")){
-      try{channelRef.current.track({ userId:profile?.id, userName:profile?.name||"User", view, joinedAt:new Date().toISOString() });}catch{}
+    if(channelRef.current){
+      try{
+        channelRef.current.track({
+          userId:    profile?.id,
+          userName:  profile?.name||"User",
+          view,
+          isAdmin:   isRoomAdmin,
+          screenSyncMode,
+          joinedAt:  new Date().toISOString()
+        });
+      }catch{}
+      // Admin in broadcast mode — push view change to all followers
+      if(isRoomAdmin && screenSyncMode==="broadcast"){
+        try{
+          channelRef.current.send({
+            type:"broadcast", event:"screen_sync",
+            payload:{ userId:profile?.id, userName:profile?.name||"Admin", view }
+          });
+        }catch{}
+      }
     }
   },[view]);
 
@@ -6431,7 +6902,58 @@ function App(){
     });
   },[]);
 
-  // ── Cloud sync after login (deferred until showToast is available) ──────────
+  // ── Resolve ?room=<projectId> — join a live team room ──────────────────────
+  useEffect(()=>{
+    const roomId = window.__FCC_ROOM_ID__;
+    const removeOverlay = () => { try{ document.getElementById('fcc-room-loader')?.remove(); }catch{} };
+    if(!roomId){ removeOverlay(); return; }
+    window.__FCC_ROOM_ID__ = null;
+
+    const joinRoom = async () => {
+      removeOverlay();
+      // Try to load the project from Supabase cloud
+      if(sbReady()){
+        try{
+          const rows = await sbFetch(`fcc_projects?id=eq.${encodeURIComponent(roomId)}&select=data,updated_at`);
+          if(rows?.length){
+            const cloudProj = rows[0].data;
+            if(cloudProj){
+              setProjects(prev=>{
+                const exists = prev.findIndex(p=>p.id===cloudProj.id);
+                if(exists>=0){
+                  setActiveProject(exists);
+                  return prev;
+                }
+                const next = [...prev, {...cloudProj, _liveRoom:true}];
+                persist("ahp_projects", next);
+                setActiveProject(next.length-1);
+                return next;
+              });
+            }
+          }
+        }catch(e){ console.warn("[Mradi Room] Could not load project:", e.message); }
+      }
+      // Determine if this user is the admin (owner) of the project
+      const currentProj = projects.find(p=>p.id===roomId);
+      const ownerMatch = currentProj?.owner_id && profile?.id && currentProj.owner_id===profile.id;
+      setIsRoomAdmin(ownerMatch || false);
+      setShowTeamRoom(true);
+      setShowLanding(false);
+      // Welcome message
+      addChatMsg({ id:"sys-boot", type:"system", text:"🚀 You joined the live team room" });
+      showToast(`✓ Joined live room for ${currentProj?.site?.name || "the project"}`);
+    };
+    // Delay slightly to let auth / state settle
+    setTimeout(joinRoom, 600);
+  },[]);
+
+  // Determine room admin status whenever profile or project changes
+  useEffect(()=>{
+    if(!proj || !profile) return;
+    // Admin = project was created by this user (owner_id match) OR no owner set
+    const isOwner = !proj.owner_id || proj.owner_id===profile.id || profile.id?.startsWith("local-");
+    setIsRoomAdmin(isOwner);
+  },[proj?.id, profile?.id]);
   useEffect(()=>{
     const uid = window.__pendingCloudSync;
     if(uid){
@@ -6663,6 +7185,44 @@ function App(){
 
       {showOrgPanel&&<AccountPanel profile={profile} onClose={()=>setShowOrgPanel(false)} onProfileSaved={p=>setProfile(p)} showToast={showToast}/>}
       {showShareModal&&<ShareSnapshotModal proj={proj} diaries={diaries} materials={materials} provisions={provisions} onClose={()=>setShowShareModal(false)} showToast={showToast} currentUserId={profile?.id||null}/>}
+      {showTeamRoom&&(
+        <TeamRoomPanel
+          proj={proj}
+          profile={profile}
+          channelRef={channelRef}
+          roomMembers={roomMembers}
+          chatMessages={chatMessages}
+          addChatMsg={addChatMsg}
+          onClose={()=>setShowTeamRoom(false)}
+          isAdmin={isRoomAdmin}
+          screenSyncMode={screenSyncMode}
+          setScreenSyncMode={mode=>{
+            setScreenSyncMode(mode);
+            // When admin switches to broadcast, immediately sync current view
+            if(isRoomAdmin && mode==="broadcast" && channelRef.current){
+              try{
+                channelRef.current.send({
+                  type:"broadcast", event:"screen_sync",
+                  payload:{ userId:profile?.id, userName:profile?.name||"Admin", view }
+                });
+              }catch{}
+            }
+            // Update presence with new sync mode
+            if(channelRef.current){
+              try{
+                channelRef.current.track({
+                  userId:    profile?.id,
+                  userName:  profile?.name||"User",
+                  view, isAdmin:isRoomAdmin, screenSyncMode:mode,
+                  joinedAt:  new Date().toISOString()
+                });
+              }catch{}
+            }
+          }}
+          currentView={view}
+          showToast={showToast}
+        />
+      )}
       {showNewProject&&<NewProjectWizard onCreate={p=>{const np=[...projects,p];setProjects(np);persist("ahp_projects",np);setActiveProject(np.length-1);setShowNewProject(false);showToast("✓ New project created");}} onCancel={()=>setShowNewProject(false)}/>}
 
       {/* PROJECT PICKER */}
@@ -6754,8 +7314,26 @@ function App(){
                   style={{borderColor:"var(--accent)44",background:"var(--accent)08"}}>
                   <span style={{fontSize:"16px"}}>🔗</span>
                   <div>
-                    <div style={{fontSize:"11px",fontWeight:"700",color:"var(--accent)"}}>Share Link</div>
+                    <div style={{fontSize:"11px",fontWeight:"700",color:"var(--accent)"}}>Share Snapshot</div>
                     <div style={{fontSize:"8px",opacity:0.7,marginTop:"1px"}}>Generate a unique shareable link</div>
+                  </div>
+                </button>
+                {/* Team Room */}
+                <button className="mob-drawer-btn" onClick={()=>{setShowMobileMenu(false);setShowTeamRoom(true);}}
+                  style={{borderColor:"var(--green)44",background:"var(--green)08"}}>
+                  <span style={{fontSize:"16px"}}>👥</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:"11px",fontWeight:"700",color:"var(--green)",display:"flex",alignItems:"center",gap:"6px"}}>
+                      Team Room
+                      {roomMembers.length>0&&(
+                        <span style={{background:"var(--green)",color:"#fff",borderRadius:"3px",padding:"0 5px",fontSize:"8px",fontWeight:"800"}}>
+                          {roomMembers.length+1} live
+                        </span>
+                      )}
+                    </div>
+                    <div style={{fontSize:"8px",opacity:0.7,marginTop:"1px"}}>
+                      {isRoomAdmin?"Invite team · Screen sync · Live chat":"Join admin room · Follow screen"}
+                    </div>
                   </div>
                 </button>
                 {/* Live presence in drawer */}
@@ -6871,6 +7449,18 @@ function App(){
               {syncing?"…":online?"On":"Off"}
             </span>
           </div>
+
+          {/* TEAM ROOM PILL — always visible, shows live member count when room is open */}
+          <button className="room-pill" onClick={()=>setShowTeamRoom(s=>!s)} title="Open Team Room">
+            <div className="room-pill-dot"/>
+            <span>👥</span>
+            {roomMembers.length > 0 && (
+              <span style={{background:"var(--green)",color:"#fff",borderRadius:"2px",padding:"0 4px",fontSize:"8px",fontWeight:"800",fontFamily:"'Share Tech Mono',monospace"}}>
+                {roomMembers.length + 1}
+              </span>
+            )}
+            <span className="room-pill-label">{showTeamRoom ? "Close Room" : "Team Room"}</span>
+          </button>
 
           {/* INTEGRATION HUB — desktop only */}
           <button onClick={()=>{ if(hasAddon("integrations")){ setShowIntegration(true); } else { setShowPremium("integrations"); } }} title="Integration Hub" style={{background:"var(--purple)15",border:"1px solid var(--purple)44",color:"var(--purple)",padding:"6px 10px",fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.08em",borderRadius:"4px",cursor:"pointer",display:"flex",alignItems:"center",gap:"4px",transition:"all 0.15s",flexShrink:0}} className="hide-mobile hide-tablet">
