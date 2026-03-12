@@ -104,7 +104,7 @@ self.addEventListener('fetch', e => {
           reg.addEventListener('updatefound', () => {
             const nw = reg.installing;
             nw && nw.addEventListener('statechange', () => {
-              if(nw.statechange === 'installed' && navigator.serviceWorker.controller) {
+              if(nw.state === 'installed' && navigator.serviceWorker.controller) {
                 console.log('[Mradi SW] Update available — reload to apply');
               }
             });
@@ -149,7 +149,17 @@ self.addEventListener('fetch', e => {
           overlay.innerHTML='<div style="font-size:36px;animation:spin 1s linear infinite">👥</div><div style="font-size:11px;letter-spacing:0.15em;text-transform:uppercase;color:#4A9EFF">Joining Team Room…</div><div style="font-size:9px;color:#666688;letter-spacing:0.1em">Connecting to live session</div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>';
           document.body.appendChild(overlay);
         }
-      }catch(e){ /* ignore */ }
+        // ?join=<inviteCode> — join an organisation
+        const joinCode=params.get('join');
+        if(joinCode){
+          window.__FCC_JOIN_CODE__ = joinCode.toUpperCase();
+          const overlay=document.createElement('div');
+          overlay.id='fcc-join-loader';
+          overlay.style.cssText='position:fixed;inset:0;background:#080812;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;font-family:monospace;color:#00D4AA;gap:16px;';
+          overlay.innerHTML='<div style="font-size:36px;animation:spin 1s linear infinite">👥</div><div style="font-size:11px;letter-spacing:0.15em;text-transform:uppercase;color:#00D4AA">Joining Organisation…</div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>';
+          document.body.appendChild(overlay);
+        }
+      }catch(e){ /* param init error — ignore */ }
     })();
   </script>
   <style>
@@ -237,9 +247,58 @@ self.addEventListener('fetch', e => {
     .nav-btn{background:none;border:none;cursor:pointer;padding:8px 10px;font-family:'Share Tech Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:0.05em;border-radius:4px;transition:all 0.15s;color:var(--text3);white-space:nowrap;}
     .nav-btn:hover{color:var(--text);background:var(--nav-active-bg);}
     .nav-btn.active{color:var(--accent);background:var(--nav-active-bg);border-bottom:2px solid var(--accent);font-weight:700;}
-    /* Desktop nav: takes all remaining space, hides scroll bar */
-    .desktop-nav{flex:1 1 0;min-width:0;display:flex;gap:1px;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none;-ms-overflow-style:none;}
-    .desktop-nav::-webkit-scrollbar{display:none;}
+
+    /* ── DESKTOP NAV DROPDOWN ── */
+    .desktop-nav{flex:1 1 0;min-width:0;display:flex;align-items:center;position:relative;z-index:200;}
+    .nav-trigger{
+      display:flex;align-items:center;gap:8px;
+      background:var(--nav-active-bg);border:1px solid var(--border);
+      border-radius:8px;padding:7px 12px;cursor:pointer;
+      font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;
+      text-transform:uppercase;letter-spacing:0.07em;color:var(--accent);
+      transition:all 0.15s;white-space:nowrap;max-width:240px;
+      user-select:none;
+    }
+    .nav-trigger:hover{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 18%,transparent);}
+    .nav-trigger-icon{font-size:14px;line-height:1;}
+    .nav-trigger-label{flex:1;overflow:hidden;text-overflow:ellipsis;}
+    .nav-trigger-chevron{
+      font-size:9px;color:var(--text4);margin-left:2px;
+      transition:transform 0.18s ease;flex-shrink:0;
+    }
+    .nav-trigger.open .nav-trigger-chevron{transform:rotate(180deg);}
+    /* Dropdown panel */
+    .nav-dropdown{
+      width:min(340px,90vw);
+      background:var(--modal-bg);
+      border:1px solid var(--border);border-radius:14px;
+      box-shadow:0 16px 48px rgba(0,0,0,0.22),0 2px 8px rgba(0,0,0,0.08);
+      overflow:hidden;
+      animation:navDropIn 0.18s cubic-bezier(0.34,1.2,0.64,1);
+    }
+    @keyframes navDropIn{
+      from{opacity:0;transform:translateY(-6px) scale(0.97);}
+      to{opacity:1;transform:translateY(0) scale(1);}
+    }
+    .nav-dropdown-grid{
+      display:grid;grid-template-columns:1fr 1fr;
+      padding:8px;gap:3px;
+    }
+    .nav-drop-item{
+      display:flex;align-items:center;gap:9px;
+      padding:11px 13px;border-radius:10px;border:none;background:none;
+      cursor:pointer;text-align:left;width:100%;
+      transition:background 0.12s,color 0.12s;
+      font-family:'Share Tech Mono',monospace;font-size:9.5px;
+      text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);
+    }
+    .nav-drop-item:hover{background:var(--nav-active-bg);color:var(--text);}
+    .nav-drop-item.active{
+      background:var(--accent)18;color:var(--accent);font-weight:700;
+    }
+    .nav-drop-item.active .nav-drop-icon{transform:scale(1.15);}
+    .nav-drop-icon{font-size:17px;line-height:1;flex-shrink:0;transition:transform 0.15s;}
+
     /* Desktop header right cluster: never shrinks */
     .hdr-right{flex:0 0 auto;display:flex;align-items:center;gap:6px;}
 
@@ -355,9 +414,9 @@ self.addEventListener('fetch', e => {
     }
     .mob-nav-btn{
       flex:1;background:none;border:none;cursor:pointer;
-      padding:9px 2px 8px;
-      font-family:'Share Tech Mono',monospace;font-size:8px;
-      text-transform:uppercase;letter-spacing:0.04em;color:var(--text4);
+      padding:8px 1px 7px;
+      font-family:'Share Tech Mono',monospace;font-size:7px;
+      text-transform:uppercase;letter-spacing:0.03em;color:var(--text4);
       display:flex;flex-direction:column;align-items:center;gap:3px;
       border-radius:20px;min-width:0;
       transition:color 0.2s ease;
@@ -383,7 +442,11 @@ self.addEventListener('fetch', e => {
 
     /* ── MOBILE DRAWER MENU ── */
     .mob-drawer-overlay{position:fixed;inset:0;background:var(--overlay);z-index:350;animation:fadeIn 0.18s ease;}
-    .mob-drawer{position:fixed;top:0;right:0;bottom:0;width:min(300px,88vw);background:var(--modal-bg);border-left:1px solid var(--border);z-index:351;animation:slideIn 0.22s cubic-bezier(0.32,0.72,0,1);overflow-y:auto;display:flex;flex-direction:column;box-shadow:-8px 0 40px rgba(0,0,0,0.2);}
+    .mob-drawer{position:fixed;top:0;right:0;bottom:0;width:min(320px,88vw);background:var(--modal-bg);border-left:1px solid var(--border);z-index:351;animation:slideIn 0.22s cubic-bezier(0.32,0.72,0,1);overflow-y:auto;display:flex;flex-direction:column;box-shadow:-8px 0 40px rgba(0,0,0,0.2);}
+    @media(max-width:480px){
+      .mob-drawer{top:auto;left:0;right:0;bottom:0;width:100%;max-height:90vh;border-left:none;border-top:1px solid var(--border);border-radius:24px 24px 0 0;animation:slideUp 0.28s cubic-bezier(0.32,0.72,0,1);}
+      .mob-drawer::before{content:'';display:block;width:36px;height:4px;background:var(--border2);border-radius:2px;margin:10px auto 4px;flex-shrink:0;}
+    }
     .mob-drawer-header{padding:16px 18px 12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:var(--modal-bg);z-index:1;}
     .mob-drawer-title{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:0.14em;}
     .mob-drawer-close{background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;padding:4px;line-height:1;}
@@ -424,7 +487,7 @@ self.addEventListener('fetch', e => {
       .desktop-nav{display:none !important;}
       /* Frosted glass header */
       header{
-        height:52px !important;padding:0 14px !important;overflow:hidden;
+        height:52px !important;padding:0 12px !important;overflow:visible !important;
         background:rgba(255,255,255,0.82) !important;
         -webkit-backdrop-filter:blur(24px) saturate(180%) !important;
         backdrop-filter:blur(24px) saturate(180%) !important;
@@ -569,6 +632,245 @@ self.addEventListener('fetch', e => {
       .no-print{display:none !important;}
       body{background:#fff !important;}
       .re-report-print{box-shadow:none !important;border:none !important;}
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       MOBILE CONTENT SYSTEM — iPhone 17 / Galaxy / Pixel
+       Full-screen native app feel for all views
+    ══════════════════════════════════════════════════════════ */
+
+    /* Horizontal swipe tray — stat cards, phase chips */
+    .mob-scroll-x{
+      display:flex;gap:10px;overflow-x:auto;
+      scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;
+      scrollbar-width:none;padding-bottom:2px;
+      margin:0 -14px;padding-left:14px;padding-right:14px;
+    }
+    .mob-scroll-x::-webkit-scrollbar{display:none;}
+    .mob-scroll-x > *{scroll-snap-align:start;flex-shrink:0;}
+
+    /* Mobile stat card in a swipe row */
+    .mob-stat-card{
+      min-width:140px;flex:0 0 140px;
+      background:var(--card);border:1px solid var(--border);
+      border-radius:18px;padding:16px 14px;
+      display:flex;flex-direction:column;gap:4px;
+    }
+
+    /* Mobile hero card — project overview */
+    .mob-hero{
+      background:var(--card);border:1px solid var(--border);
+      border-radius:22px;padding:20px 18px;
+      margin-bottom:14px;position:relative;overflow:hidden;
+    }
+    .mob-hero::before{
+      content:'';position:absolute;top:0;left:0;right:0;height:3px;
+      background:linear-gradient(90deg,var(--accent),var(--green),var(--amber));
+    }
+
+    /* Mobile section header — label + count + action */
+    .mob-section-hdr{
+      display:flex;align-items:center;justify-content:space-between;
+      padding:0 0 10px;margin-bottom:2px;
+    }
+    .mob-section-label{
+      font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;
+      color:var(--text4);text-transform:uppercase;letter-spacing:0.1em;
+    }
+    .mob-section-action{
+      font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--accent);
+      background:none;border:none;cursor:pointer;padding:4px 0;
+      display:flex;align-items:center;gap:3px;
+    }
+
+    /* Mobile list row — tappable item in a list */
+    .mob-list-row{
+      display:flex;align-items:center;gap:12px;
+      padding:14px 16px;
+      background:var(--card);border-bottom:1px solid var(--border);
+      cursor:pointer;transition:background 0.1s;
+      -webkit-tap-highlight-color:transparent;
+      position:relative;
+    }
+    .mob-list-row:first-child{border-radius:18px 18px 0 0;}
+    .mob-list-row:last-child{border-bottom:none;border-radius:0 0 18px 18px;}
+    .mob-list-row:only-child{border-radius:18px;}
+    .mob-list-row:active{background:var(--nav-active-bg);}
+    .mob-list-row::after{
+      content:'›';position:absolute;right:16px;top:50%;transform:translateY(-50%);
+      font-size:18px;color:var(--text4);opacity:0.5;
+    }
+
+    /* Mobile phase card in swipe tray */
+    .mob-phase-card{
+      min-width:180px;flex:0 0 180px;
+      background:var(--card);border:1px solid var(--border);border-radius:18px;
+      padding:16px;position:relative;overflow:hidden;
+      -webkit-tap-highlight-color:transparent;
+    }
+    .mob-phase-card:active{opacity:0.85;}
+
+    /* ─────────────────────────────────────────────────────────────
+       MULTI-TENANT ORG SYSTEM
+       ───────────────────────────────────────────────────────────── */
+    .org-setup-screen{position:fixed;inset:0;background:var(--bg);z-index:960;display:flex;align-items:center;justify-content:center;animation:fadeIn 0.3s;padding:20px;overflow-y:auto;}
+    .org-box{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px;width:min(480px,100%);position:relative;overflow:hidden;box-shadow:0 20px 64px rgba(0,0,0,0.18);margin:auto;}
+    .org-box::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--gradient);}
+    .org-mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:24px;}
+    .org-mode-btn{background:var(--bg);border:2px solid var(--border);border-radius:14px;padding:20px 16px;cursor:pointer;text-align:center;transition:all 0.18s;display:flex;flex-direction:column;align-items:center;gap:8px;}
+    .org-mode-btn:hover,.org-mode-btn.selected{border-color:var(--accent);background:var(--accent-bg);}
+    .org-mode-btn.selected{box-shadow:0 0 0 3px var(--accent)22;}
+    .org-mode-icon{font-size:32px;line-height:1;}
+    .org-mode-label{font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:var(--text);}
+    .org-mode-sub{font-size:10px;color:var(--text4);line-height:1.4;}
+    .invite-code-box{background:var(--accent)10;border:2px dashed var(--accent)44;border-radius:12px;padding:16px 20px;text-align:center;margin:12px 0;}
+    .invite-code-val{font-family:'Bebas Neue',sans-serif;font-size:40px;letter-spacing:0.25em;color:var(--accent);line-height:1;}
+    .invite-code-lbl{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--text4);text-transform:uppercase;letter-spacing:0.12em;margin-top:4px;}
+    .role-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:10px;font-family:'Share Tech Mono',monospace;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;flex-shrink:0;white-space:nowrap;}
+    .role-badge.admin{background:var(--amber)18;color:var(--amber);border:1px solid var(--amber)33;}
+    .role-badge.member{background:var(--green)12;color:var(--green);border:1px solid var(--green)30;}
+    .org-member-row{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg);border-radius:12px;margin-bottom:8px;}
+    .org-member-avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Share Tech Mono',monospace;font-size:14px;font-weight:800;color:#fff;flex-shrink:0;}
+    .org-member-name{font-size:13px;font-weight:700;color:var(--text);line-height:1.2;}
+    .org-member-meta{font-family:'Share Tech Mono',monospace;font-size:8.5px;color:var(--text4);margin-top:2px;}
+    .org-pill{display:flex;align-items:center;gap:5px;padding:4px 9px;background:var(--surface);border:1px solid var(--border);border-radius:20px;cursor:pointer;transition:all 0.15s;flex-shrink:0;max-width:160px;overflow:hidden;}
+    .org-pill:hover{border-color:var(--accent);}
+    .org-pill-name{font-family:'Share Tech Mono',monospace;font-size:9px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    @media(max-width:900px){.org-pill-name{display:none;}}
+    .org-panel-overlay{position:fixed;inset:0;background:var(--overlay);z-index:600;animation:fadeIn 0.2s;backdrop-filter:blur(3px);}
+    .org-panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(540px,96vw);max-height:88vh;background:var(--modal-bg);border:1px solid var(--border);border-radius:16px;z-index:601;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,0.25);animation:fadeUp 0.2s ease;}
+
+    /* Mobile provisions chips */
+    .mob-provision-grid{
+      display:grid;grid-template-columns:1fr 1fr;gap:8px;
+    }
+    .mob-provision-chip{
+      background:var(--card);border:1px solid var(--border);border-radius:14px;
+      padding:12px 14px;
+    }
+
+    /* ── MOBILE PROVISIONS CARDS (PS / PC / DW) ── */
+    .prov-card{
+      background:var(--card);border:1px solid var(--border);border-radius:16px;
+      padding:14px 16px;margin-bottom:10px;position:relative;overflow:hidden;
+    }
+    .prov-card-accent{position:absolute;top:0;left:0;bottom:0;width:4px;border-radius:16px 0 0 16px;}
+    .prov-card-id{font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:800;letter-spacing:0.06em;}
+    .prov-card-desc{font-size:13px;font-weight:700;color:var(--text);margin:4px 0 8px;line-height:1.35;}
+    .prov-card-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
+    .prov-card-label{font-family:'Share Tech Mono',monospace;font-size:8.5px;color:var(--text4);text-transform:uppercase;letter-spacing:0.07em;}
+    .prov-card-value{font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:700;}
+    .prov-card-amounts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);}
+    .prov-card-amount-cell{text-align:center;}
+    .prov-card-amount-val{font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:800;line-height:1;}
+    .prov-card-amount-lbl{font-family:'Share Tech Mono',monospace;font-size:7.5px;color:var(--text4);text-transform:uppercase;margin-top:2px;letter-spacing:0.05em;}
+    .prov-card-actions{display:flex;gap:6px;margin-top:10px;}
+    /* hide table on mobile, show cards */
+    @media(max-width:768px){
+      .prov-desktop-table{display:none !important;}
+      .prov-mobile-cards{display:block !important;}
+      /* fix waterfall row label width on mobile */
+      .waterfall-label{flex:0 0 auto !important;width:auto !important;max-width:55% !important;font-size:10px !important;}
+      .waterfall-amount{font-size:11px !important;}
+      /* summary stats wrap nicely */
+      .prov-stat-bar{flex-wrap:wrap;gap:6px;}
+      .prov-stat-bar strong{font-size:11px;}
+    }
+    @media(min-width:769px){
+      .prov-mobile-cards{display:none !important;}
+    }
+
+    /* Section divider */
+    .mob-divider{
+      height:1px;background:var(--border);margin:4px 0 16px;opacity:0.5;
+    }
+
+    /* Swipe indicator for horizontal scrollers */
+    .mob-swipe-hint{
+      display:flex;align-items:center;gap:4px;
+      font-family:'Share Tech Mono',monospace;font-size:8px;
+      color:var(--text4);padding:6px 0 2px;
+    }
+
+    /* Mobile risk row */
+    .mob-risk-row{
+      display:flex;align-items:flex-start;gap:12px;
+      padding:13px 16px;background:var(--card);
+      border-bottom:1px solid var(--border);
+    }
+    .mob-risk-row:first-child{border-radius:18px 18px 0 0;}
+    .mob-risk-row:last-child{border-bottom:none;border-radius:0 0 18px 18px;}
+
+    /* Mobile team member card */
+    .mob-member-card{
+      background:var(--card);border:1px solid var(--border);
+      border-radius:18px;padding:16px;margin-bottom:10px;
+    }
+
+    /* Tab-style section switcher */
+    .mob-tab-bar{
+      display:flex;gap:6px;overflow-x:auto;
+      scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;
+      scrollbar-width:none;padding-bottom:2px;
+      margin:0 -14px;padding-left:14px;padding-right:14px;
+      margin-bottom:14px;
+    }
+    .mob-tab-bar::-webkit-scrollbar{display:none;}
+    .mob-tab-btn{
+      scroll-snap-align:start;flex-shrink:0;
+      padding:8px 16px;border-radius:20px;
+      font-family:'Share Tech Mono',monospace;font-size:9px;font-weight:700;
+      text-transform:uppercase;letter-spacing:0.06em;
+      background:var(--card);border:1px solid var(--border);color:var(--text3);
+      cursor:pointer;transition:all 0.15s;white-space:nowrap;
+    }
+    .mob-tab-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+    /* Pill badge — larger, more readable on mobile */
+    .mob-badge{
+      display:inline-flex;align-items:center;gap:4px;
+      padding:4px 10px;border-radius:20px;
+      font-family:'Share Tech Mono',monospace;font-size:9px;font-weight:700;
+    }
+
+    /* Big number display */
+    .mob-big-num{
+      font-size:36px;font-weight:900;line-height:1;letter-spacing:-0.02em;
+    }
+    .mob-mid-num{
+      font-size:22px;font-weight:900;line-height:1;
+    }
+
+    /* Mobile-only show/hide */
+    .mob-only{display:none;}
+    .desk-only{display:block;}
+
+    @media(max-width:768px){
+      .mob-only{display:block;}
+      .desk-only{display:none;}
+      .mob-only-flex{display:flex !important;}
+      .mob-only-grid{display:grid !important;}
+
+      /* Make ALL section titles bigger on mobile */
+      .card [style*="font-size:\"10px\""],
+      .card [style*="font-size:10px"]{font-size:11px !important;}
+
+      /* Card touch feedback */
+      .card{-webkit-tap-highlight-color:transparent;}
+
+      /* Tables: sticky first column */
+      .tbl-wrap th:first-child,
+      .tbl-wrap td:first-child{
+        position:sticky;left:0;
+        background:var(--card);z-index:1;
+        box-shadow:2px 0 4px rgba(0,0,0,0.06);
+      }
+
+      /* Smooth bounce scroll */
+      main{scroll-behavior:smooth;-webkit-overflow-scrolling:touch;}
+
+      /* Section spacing */
+      main > div > div{margin-bottom:10px;}
     }
 
     /* ══════════════════════════════════════════════════════════
@@ -2307,15 +2609,15 @@ function ProvisionsView({provisions,setProvisions,site,phases}){
 
   // ── Waterfall bar component ───────────────────────────────────────────────────
   const WaterfallRow=({label,amount,sub,color,indent=false,bold=false,divider=false})=>(
-    <div style={{display:"flex",alignItems:"center",gap:"10px",padding:`${divider?"10px":"5px"} 0`,borderTop:divider?"2px solid var(--border)":"none",marginTop:divider?"4px":"0"}}>
-      <div style={{flex:"0 0 220px",fontSize:bold?"12px":"11px",fontWeight:bold?800:500,color:bold?"var(--text)":"var(--text2)",fontFamily:"'Share Tech Mono',monospace",paddingLeft:indent?"14px":"0",borderLeft:indent?`3px solid ${color||"var(--border)"}40`:"none"}}>
+    <div style={{display:"flex",alignItems:"center",gap:"8px",padding:`${divider?"10px":"5px"} 0`,borderTop:divider?"2px solid var(--border)":"none",marginTop:divider?"4px":"0"}}>
+      <div className="waterfall-label" style={{flex:"0 0 200px",fontSize:bold?"12px":"11px",fontWeight:bold?800:500,color:bold?"var(--text)":"var(--text2)",fontFamily:"'Share Tech Mono',monospace",paddingLeft:indent?"14px":"0",borderLeft:indent?`3px solid ${color||"var(--border)"}40`:"none"}}>
         {label}
       </div>
-      <div style={{flex:1,display:"flex",alignItems:"center",gap:"8px"}}>
-        {amount!==0&&<div style={{width:`${Math.min(100,Math.abs(amount)/originalContract*100*8)}%`,minWidth:"4px",maxWidth:"60%",height:bold?"12px":"8px",background:color||"var(--accent)",borderRadius:"2px",opacity:amount<0?0.5:0.85,border:amount<0?`1px dashed ${color}`:"none"}}/>}
-        <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:bold?"13px":"11px",fontWeight:bold?800:600,color:color||"var(--text)",whiteSpace:"nowrap"}}>{amount>=0?"":"-"}{fmtKES(Math.abs(amount))}</div>
+      <div style={{flex:1,display:"flex",alignItems:"center",gap:"6px",minWidth:0}}>
+        {amount!==0&&<div style={{width:`${Math.min(100,Math.abs(amount)/Math.max(originalContract,1)*100*8)}%`,minWidth:"4px",maxWidth:"50%",height:bold?"12px":"8px",background:color||"var(--accent)",borderRadius:"2px",opacity:amount<0?0.5:0.85,border:amount<0?`1px dashed ${color}`:"none",flexShrink:0}}/>}
+        <div className="waterfall-amount" style={{fontFamily:"'Share Tech Mono',monospace",fontSize:bold?"13px":"11px",fontWeight:bold?800:600,color:color||"var(--text)",whiteSpace:"nowrap"}}>{amount>=0?"":"-"}{fmtKES(Math.abs(amount))}</div>
       </div>
-      {sub&&<div style={{fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",whiteSpace:"nowrap"}}>{sub}</div>}
+      {sub&&<div style={{fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",whiteSpace:"nowrap",flexShrink:0}}>{sub}</div>}
     </div>
   );
 
@@ -2443,13 +2745,18 @@ function ProvisionsView({provisions,setProvisions,site,phases}){
       {/* ── PROVISIONAL SUMS TAB ── */}
       {tab==="ps"&&(
         <div>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px",flexWrap:"wrap",gap:"8px"}}>
-            <div style={{fontSize:"10px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>
-              Scheduled: <strong style={{color:"var(--text)"}}>{fmtKES(psScheduled)}</strong> · Instructed: <strong style={{color:"var(--accent)"}}>{fmtKES(psInstructed)}</strong> · Spent: <strong style={{color:"var(--green)"}}>{fmtKES(psSpent)}</strong> · Saved: <strong style={{color:"var(--green)"}}>{fmtKES(psSaved)}</strong>
+          <div className="prov-stat-bar" style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px",flexWrap:"wrap",gap:"8px"}}>
+            <div style={{fontSize:"10px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",display:"flex",flexWrap:"wrap",gap:"6px"}}>
+              <span>Sched: <strong style={{color:"var(--text)"}}>{fmtKES(psScheduled)}</strong></span>
+              <span>· Instructed: <strong style={{color:"var(--accent)"}}>{fmtKES(psInstructed)}</strong></span>
+              <span>· Spent: <strong style={{color:"var(--green)"}}>{fmtKES(psSpent)}</strong></span>
+              <span>· Saved: <strong style={{color:"var(--green)"}}>{fmtKES(psSaved)}</strong></span>
             </div>
             <button className="btn-add" style={{width:"auto",marginTop:0,padding:"6px 14px",fontSize:"9px"}} onClick={()=>addItem("provisionalSums",{id:`PS${String(provisionalSums.length+1).padStart(3,"0")}`,description:"New Provisional Sum",phase:"PH1",scheduled:0,instructed:0,spent:0,status:"pending",ref:"",approvedDate:"",notes:""})}>+ Add PS Item</button>
           </div>
-          <div className="card" style={{overflowX:"auto"}}>
+
+          {/* DESKTOP TABLE */}
+          <div className="prov-desktop-table card" style={{overflowX:"auto"}}>
             <table>
               <thead><tr><th>ID</th><th>Description</th><th>Phase</th><th>Status</th><th>Scheduled</th><th>Instructed</th><th>Spent</th><th>Ref</th><th style={{width:"70px"}}></th></tr></thead>
               <tbody>
@@ -2495,39 +2802,90 @@ function ProvisionsView({provisions,setProvisions,site,phases}){
               </tfoot>
             </table>
           </div>
+
+          {/* MOBILE CARDS */}
+          <div className="prov-mobile-cards" style={{display:"none"}}>
+            {provisionalSums.length===0&&<div style={{textAlign:"center",padding:"28px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",fontSize:"10px"}}>No provisional sums yet · Tap + Add PS Item</div>}
+            {provisionalSums.map((ps,i)=>(
+              <div key={ps.id} className="prov-card">
+                <div className="prov-card-accent" style={{background:PROV_SCC[ps.status]||"#A0AEC0"}}/>
+                <div style={{marginLeft:"10px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"4px"}}>
+                    <span className="prov-card-id" style={{color:PROV_SCC[ps.status]||"#A0AEC0"}}>{ps.id}</span>
+                    <div style={{display:"flex",gap:"5px",alignItems:"center"}}>
+                      <Badge label={ps.status} color={PROV_SCC[ps.status]||"#A0AEC0"}/>
+                      <Badge label={ps.phase} color="var(--text3)"/>
+                    </div>
+                  </div>
+                  <div className="prov-card-desc">{ps.description}</div>
+                  {ps.notes&&<div style={{fontSize:"10px",color:"var(--text3)",marginBottom:"6px",padding:"5px 8px",background:"var(--bg)",borderRadius:"6px"}}>{ps.notes}</div>}
+                  <div className="prov-card-amounts">
+                    <div className="prov-card-amount-cell">
+                      <div className="prov-card-amount-val" style={{color:"var(--text)"}}>{fmtKES(ps.scheduled)}</div>
+                      <div className="prov-card-amount-lbl">Scheduled</div>
+                    </div>
+                    <div className="prov-card-amount-cell">
+                      <div className="prov-card-amount-val" style={{color:ps.instructed>0?"var(--accent)":"var(--text4)"}}>{fmtKES(ps.instructed)}</div>
+                      <div className="prov-card-amount-lbl">Instructed</div>
+                    </div>
+                    <div className="prov-card-amount-cell">
+                      <div className="prov-card-amount-val" style={{color:ps.spent>0?"var(--green)":"var(--text4)"}}>{fmtKES(ps.spent)}</div>
+                      <div className="prov-card-amount-lbl">Spent</div>
+                    </div>
+                  </div>
+                  {ps.ref&&<div style={{marginTop:"6px",fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>Ref: {ps.ref}</div>}
+                  <div className="prov-card-actions">
+                    <button className="btn-ghost" style={{flex:1,padding:"7px",fontSize:"10px"}} onClick={()=>startEdit("provisionalSums",i)}>✏ Edit</button>
+                    <button className="btn-danger" style={{padding:"7px 12px",fontSize:"10px"}} onClick={()=>removeItem("provisionalSums",i)}>🗑</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {/* Mobile totals footer */}
+            {provisionalSums.length>0&&(
+              <div style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"14px",padding:"14px 16px",display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",textAlign:"center"}}>
+                <div><div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",fontWeight:"800",color:"var(--text)"}}>{fmtKES(psScheduled)}</div><div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"7.5px",color:"var(--text4)",textTransform:"uppercase",marginTop:"2px"}}>Total Sched.</div></div>
+                <div><div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",fontWeight:"800",color:"var(--accent)"}}>{fmtKES(psInstructed)}</div><div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"7.5px",color:"var(--text4)",textTransform:"uppercase",marginTop:"2px"}}>Total Instruc.</div></div>
+                <div><div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",fontWeight:"800",color:"var(--green)"}}>{fmtKES(psSpent)}</div><div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"7.5px",color:"var(--text4)",textTransform:"uppercase",marginTop:"2px"}}>Total Spent</div></div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       {/* ── PRIME COST TAB ── */}
       {tab==="pc"&&(
         <div>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px",flexWrap:"wrap",gap:"8px"}}>
-            <div style={{fontSize:"10px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>
-              PC Scheduled: <strong style={{color:"var(--text)"}}>{fmtKES(pcScheduled)}</strong> · Actual Cost: <strong style={{color:"var(--green)"}}>{fmtKES(pcExpended)}</strong> · Adjusted: <strong style={{color:"var(--accent)"}}>{fmtKES(pcAdjusted)}</strong>
+          <div className="prov-stat-bar" style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px",flexWrap:"wrap",gap:"8px"}}>
+            <div style={{fontSize:"10px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",display:"flex",flexWrap:"wrap",gap:"6px"}}>
+              <span>Sched: <strong style={{color:"var(--text)"}}>{fmtKES(pcScheduled)}</strong></span>
+              <span>· Actual: <strong style={{color:"var(--green)"}}>{fmtKES(pcExpended)}</strong></span>
+              <span>· Adjusted: <strong style={{color:"var(--accent)"}}>{fmtKES(pcAdjusted)}</strong></span>
             </div>
             <button className="btn-add" style={{width:"auto",marginTop:0,padding:"6px 14px",fontSize:"9px"}} onClick={()=>addItem("primeCost",{id:`PC${String(primeCost.length+1).padStart(3,"0")}`,description:"New Prime Cost Item",phase:"PH1",scheduled:0,actual:0,adjusted:0,supplier:"",status:"pending",notes:""})}>+ Add PC Item</button>
           </div>
-          <div className="card" style={{overflowX:"auto"}}>
+
+          {/* DESKTOP TABLE */}
+          <div className="prov-desktop-table card" style={{overflowX:"auto"}}>
             <table>
-              <thead><tr><th>ID</th><th>Description</th><th>Phase</th><th>Status</th><th>PC Amount</th><th>Actual Cost</th><th>Adjustment</th><th>Supplier</th><th style={{width:"70px"}}></th></tr></thead>
+              <thead><tr><th>ID</th><th>Description</th><th>Phase</th><th>Status</th><th>Scheduled</th><th>Actual</th><th>Adjusted</th><th>Supplier</th><th style={{width:"70px"}}></th></tr></thead>
               <tbody>
                 {primeCost.map((pc,i)=>{
                   const isEdit=editItem&&editItem.section==="primeCost"&&editItem.idx===i;
-                  const adj=pc.actual-pc.scheduled;
                   return(
                     <tr key={pc.id} style={{background:isEdit?"var(--accent-bg)":""}}>
                       <td style={{fontWeight:"700",color:PROV_SCC[pc.status]||"#A0AEC0",whiteSpace:"nowrap"}}>{pc.id}</td>
-                      <td style={{maxWidth:"220px"}}>
+                      <td style={{maxWidth:"240px"}}>
                         {isEdit?<input ref={inputRef} className="inline-input" value={editForm.description} onChange={e=>upField("description",e.target.value)} onKeyDown={e=>{if(e.key==="Escape")cancelEdit();if(e.key==="Enter")saveEdit();}}/>
                          :<span style={{fontSize:"11px",color:"var(--text)",cursor:"pointer"}} onClick={()=>startEdit("primeCost",i)}>{pc.description}</span>}
                         {pc.notes&&!isEdit&&<div style={{fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",marginTop:"2px"}}>{pc.notes}</div>}
                       </td>
                       <td>{isEdit?<select className="inline-select" value={editForm.phase} onChange={e=>upField("phase",e.target.value)}>{phases.map(p=><option key={p.id} value={p.id}>{p.id}</option>)}</select>:<Badge label={pc.phase} color="var(--text3)"/>}</td>
                       <td>{isEdit?<select className="inline-select" value={editForm.status} onChange={e=>upField("status",e.target.value)}>{PC_STATUS_OPTS.map(o=><option key={o} value={o}>{o}</option>)}</select>:<Badge label={pc.status} color={PROV_SCC[pc.status]||"#A0AEC0"}/>}</td>
-                      <td style={{fontFamily:"'Share Tech Mono',monospace",fontWeight:"700",color:"var(--text)"}}>{isEdit?<input className="inline-input" type="number" value={editForm.scheduled} onChange={e=>upField("scheduled",Number(e.target.value))} style={{width:"90px"}}/>:fmtKES(pc.scheduled)}</td>
-                      <td style={{fontFamily:"'Share Tech Mono',monospace",color:pc.actual>0?"var(--green)":"var(--text4)"}}>{isEdit?<input className="inline-input" type="number" value={editForm.actual} onChange={e=>upField("actual",Number(e.target.value))} style={{width:"90px"}}/>:pc.actual>0?fmtKES(pc.actual):"—"}</td>
-                      <td style={{fontFamily:"'Share Tech Mono',monospace",fontWeight:"700",color:adj<0?"var(--green)":adj>0?"var(--red)":"var(--text4)"}}>{pc.actual>0?(adj<0?"-":adj>0?"+":"±")+" "+fmtKES(Math.abs(adj)):"—"}</td>
-                      <td style={{fontSize:"9px",color:"var(--text3)",fontFamily:"'Share Tech Mono',monospace",maxWidth:"160px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{isEdit?<input className="inline-input" value={editForm.supplier} onChange={e=>upField("supplier",e.target.value)}/>:pc.supplier||"—"}</td>
+                      <td style={{fontFamily:"'Share Tech Mono',monospace",fontWeight:"700",color:"var(--text)"}}>{isEdit?<input className="inline-input inline-number" type="number" value={editForm.scheduled} onChange={e=>upField("scheduled",Number(e.target.value))} style={{width:"90px"}}/>:fmtKES(pc.scheduled)}</td>
+                      <td style={{fontFamily:"'Share Tech Mono',monospace",color:(pc.actual||0)>0?"var(--green)":"var(--text4)"}}>{isEdit?<input className="inline-input inline-number" type="number" value={editForm.actual||0} onChange={e=>upField("actual",Number(e.target.value))} style={{width:"90px"}}/>:fmtKES(pc.actual||0)}</td>
+                      <td style={{fontFamily:"'Share Tech Mono',monospace",color:(pc.adjusted||0)>0?"var(--accent)":"var(--text4)"}}>{isEdit?<input className="inline-input inline-number" type="number" value={editForm.adjusted||0} onChange={e=>upField("adjusted",Number(e.target.value))} style={{width:"90px"}}/>:fmtKES(pc.adjusted||0)}</td>
+                      <td style={{fontSize:"10px",color:"var(--text3)"}}>{isEdit?<input className="inline-input" value={editForm.supplier||""} onChange={e=>upField("supplier",e.target.value)} style={{width:"120px"}}/>:pc.supplier||"—"}</td>
                       <td>
                         {isEdit
                           ?<div style={{display:"flex",gap:"4px"}}>
@@ -2548,11 +2906,58 @@ function ProvisionsView({provisions,setProvisions,site,phases}){
                   <td colSpan={4} style={{fontFamily:"'Share Tech Mono',monospace",fontWeight:"800",color:"var(--text)",fontSize:"10px"}}>TOTALS</td>
                   <td style={{fontFamily:"'Share Tech Mono',monospace",fontWeight:"800",color:"var(--text)"}}>{fmtKES(pcScheduled)}</td>
                   <td style={{fontFamily:"'Share Tech Mono',monospace",fontWeight:"800",color:"var(--green)"}}>{fmtKES(pcExpended)}</td>
-                  <td style={{fontFamily:"'Share Tech Mono',monospace",fontWeight:"800",color:pcExpended-pcScheduled<0?"var(--green)":"var(--red)"}}>{pcExpended>0?(pcExpended-pcScheduled<0?"-":"+")+" "+fmtKES(Math.abs(pcExpended-pcScheduled)):"—"}</td>
+                  <td style={{fontFamily:"'Share Tech Mono',monospace",fontWeight:"800",color:"var(--accent)"}}>{fmtKES(pcAdjusted)}</td>
                   <td colSpan={2}></td>
                 </tr>
               </tfoot>
             </table>
+          </div>
+
+          {/* MOBILE CARDS */}
+          <div className="prov-mobile-cards" style={{display:"none"}}>
+            {primeCost.length===0&&<div style={{textAlign:"center",padding:"28px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",fontSize:"10px"}}>No prime cost items yet · Tap + Add PC Item</div>}
+            {primeCost.map((pc,i)=>(
+              <div key={pc.id} className="prov-card">
+                <div className="prov-card-accent" style={{background:PROV_SCC[pc.status]||"#A0AEC0"}}/>
+                <div style={{marginLeft:"10px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"4px"}}>
+                    <span className="prov-card-id" style={{color:PROV_SCC[pc.status]||"#A0AEC0"}}>{pc.id}</span>
+                    <div style={{display:"flex",gap:"5px",alignItems:"center"}}>
+                      <Badge label={pc.status} color={PROV_SCC[pc.status]||"#A0AEC0"}/>
+                      <Badge label={pc.phase} color="var(--text3)"/>
+                    </div>
+                  </div>
+                  <div className="prov-card-desc">{pc.description}</div>
+                  {pc.notes&&<div style={{fontSize:"10px",color:"var(--text3)",marginBottom:"6px",padding:"5px 8px",background:"var(--bg)",borderRadius:"6px"}}>{pc.notes}</div>}
+                  {pc.supplier&&<div style={{fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",marginBottom:"6px"}}>Supplier: {pc.supplier}</div>}
+                  <div className="prov-card-amounts">
+                    <div className="prov-card-amount-cell">
+                      <div className="prov-card-amount-val" style={{color:"var(--text)"}}>{fmtKES(pc.scheduled)}</div>
+                      <div className="prov-card-amount-lbl">Scheduled</div>
+                    </div>
+                    <div className="prov-card-amount-cell">
+                      <div className="prov-card-amount-val" style={{color:(pc.actual||0)>0?"var(--green)":"var(--text4)"}}>{fmtKES(pc.actual||0)}</div>
+                      <div className="prov-card-amount-lbl">Actual</div>
+                    </div>
+                    <div className="prov-card-amount-cell">
+                      <div className="prov-card-amount-val" style={{color:(pc.adjusted||0)>0?"var(--accent)":"var(--text4)"}}>{fmtKES(pc.adjusted||0)}</div>
+                      <div className="prov-card-amount-lbl">Adjusted</div>
+                    </div>
+                  </div>
+                  <div className="prov-card-actions">
+                    <button className="btn-ghost" style={{flex:1,padding:"7px",fontSize:"10px"}} onClick={()=>startEdit("primeCost",i)}>✏ Edit</button>
+                    <button className="btn-danger" style={{padding:"7px 12px",fontSize:"10px"}} onClick={()=>removeItem("primeCost",i)}>🗑</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {primeCost.length>0&&(
+              <div style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"14px",padding:"14px 16px",display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",textAlign:"center"}}>
+                <div><div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",fontWeight:"800",color:"var(--text)"}}>{fmtKES(pcScheduled)}</div><div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"7.5px",color:"var(--text4)",textTransform:"uppercase",marginTop:"2px"}}>Total Sched.</div></div>
+                <div><div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",fontWeight:"800",color:"var(--green)"}}>{fmtKES(pcExpended)}</div><div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"7.5px",color:"var(--text4)",textTransform:"uppercase",marginTop:"2px"}}>Total Actual</div></div>
+                <div><div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",fontWeight:"800",color:"var(--accent)"}}>{fmtKES(pcAdjusted)}</div><div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"7.5px",color:"var(--text4)",textTransform:"uppercase",marginTop:"2px"}}>Total Adj.</div></div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2619,33 +3024,37 @@ function ProvisionsView({provisions,setProvisions,site,phases}){
       {/* ── DAYWORKS TAB ── */}
       {tab==="dw"&&(
         <div>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px",flexWrap:"wrap",gap:"8px"}}>
-            <div style={{fontSize:"10px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>
-              Approved: <strong style={{color:"var(--green)"}}>{fmtKES(dwApproved)}</strong> · Total Claimed: <strong style={{color:"var(--amber)"}}>{fmtKES(dwTotal)}</strong> · {dayworks.length} records
+          <div className="prov-stat-bar" style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px",flexWrap:"wrap",gap:"8px"}}>
+            <div style={{fontSize:"10px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",display:"flex",flexWrap:"wrap",gap:"6px"}}>
+              <span>Approved: <strong style={{color:"var(--green)"}}>{fmtKES(dwApproved)}</strong></span>
+              <span>· Claimed: <strong style={{color:"var(--amber)"}}>{fmtKES(dwTotal)}</strong></span>
+              <span>· {dayworks.length} records</span>
             </div>
             <button className="btn-add" style={{width:"auto",marginTop:0,padding:"6px 14px",fontSize:"9px"}} onClick={()=>addItem("dayworks",{id:`DW${String(dayworks.length+1).padStart(3,"0")}`,date:today(),description:"New Dayworks Record",labour:0,plant:0,materials:0,status:"draft",authorisedBy:"",ref:""})}>+ Add Dayworks</button>
           </div>
-          <div className="card" style={{overflowX:"auto"}}>
+
+          {/* DESKTOP TABLE */}
+          <div className="prov-desktop-table card" style={{overflowX:"auto"}}>
             <table>
-              <thead><tr><th>ID</th><th>Date</th><th>Description</th><th>Status</th><th>Labour</th><th>Plant</th><th>Materials</th><th>Total</th><th>Auth.</th><th style={{width:"70px"}}></th></tr></thead>
+              <thead><tr><th>ID</th><th>Date</th><th>Description</th><th>Labour</th><th>Plant</th><th>Materials</th><th>Total</th><th>Status</th><th>Auth By</th><th style={{width:"60px"}}></th></tr></thead>
               <tbody>
                 {dayworks.map((dw,i)=>{
                   const isEdit=editItem&&editItem.section==="dayworks"&&editItem.idx===i;
-                  const tot=dw.labour+dw.plant+dw.materials;
+                  const dwItemTotal=(dw.labour||0)+(dw.plant||0)+(dw.materials||0);
                   return(
                     <tr key={dw.id} style={{background:isEdit?"var(--accent-bg)":""}}>
                       <td style={{fontWeight:"700",color:PROV_SCC[dw.status]||"#A0AEC0",whiteSpace:"nowrap"}}>{dw.id}</td>
-                      <td style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"10px",whiteSpace:"nowrap"}}>{isEdit?<input className="inline-input" type="date" value={editForm.date} onChange={e=>upField("date",e.target.value)} style={{width:"110px"}}/>:dw.date}</td>
-                      <td style={{maxWidth:"200px"}}>
+                      <td style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"10px",whiteSpace:"nowrap"}}>{isEdit?<input className="inline-input" type="date" value={editForm.date||""} onChange={e=>upField("date",e.target.value)} style={{width:"110px"}}/>:dw.date}</td>
+                      <td style={{maxWidth:"220px"}}>
                         {isEdit?<input ref={inputRef} className="inline-input" value={editForm.description} onChange={e=>upField("description",e.target.value)} onKeyDown={e=>{if(e.key==="Escape")cancelEdit();if(e.key==="Enter")saveEdit();}}/>
-                         :<span style={{fontSize:"10px",color:"var(--text)",cursor:"pointer"}} onClick={()=>startEdit("dayworks",i)}>{dw.description}</span>}
+                         :<span style={{fontSize:"11px",color:"var(--text)",cursor:"pointer"}} onClick={()=>startEdit("dayworks",i)}>{dw.description}</span>}
                       </td>
+                      <td style={{fontFamily:"'Share Tech Mono',monospace",color:"var(--text)"}}>{isEdit?<input className="inline-input inline-number" type="number" value={editForm.labour||0} onChange={e=>upField("labour",Number(e.target.value))} style={{width:"80px"}}/>:fmtKES(dw.labour||0)}</td>
+                      <td style={{fontFamily:"'Share Tech Mono',monospace",color:"var(--text)"}}>{isEdit?<input className="inline-input inline-number" type="number" value={editForm.plant||0} onChange={e=>upField("plant",Number(e.target.value))} style={{width:"80px"}}/>:fmtKES(dw.plant||0)}</td>
+                      <td style={{fontFamily:"'Share Tech Mono',monospace",color:"var(--text)"}}>{isEdit?<input className="inline-input inline-number" type="number" value={editForm.materials||0} onChange={e=>upField("materials",Number(e.target.value))} style={{width:"80px"}}/>:fmtKES(dw.materials||0)}</td>
+                      <td style={{fontFamily:"'Share Tech Mono',monospace",fontWeight:"700",color:dw.status==="approved"?"var(--green)":"var(--text)"}}>{fmtKES(dwItemTotal)}</td>
                       <td>{isEdit?<select className="inline-select" value={editForm.status} onChange={e=>upField("status",e.target.value)}>{DW_STATUS_OPTS.map(o=><option key={o} value={o}>{o}</option>)}</select>:<Badge label={dw.status} color={PROV_SCC[dw.status]||"#A0AEC0"}/>}</td>
-                      <td style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"10px",color:"var(--accent)"}}>{isEdit?<input className="inline-input" type="number" value={editForm.labour} onChange={e=>upField("labour",Number(e.target.value))} style={{width:"80px"}}/>:fmtKES(dw.labour)}</td>
-                      <td style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"10px",color:"var(--purple)"}}>{isEdit?<input className="inline-input" type="number" value={editForm.plant} onChange={e=>upField("plant",Number(e.target.value))} style={{width:"80px"}}/>:fmtKES(dw.plant)}</td>
-                      <td style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"10px",color:"var(--amber)"}}>{isEdit?<input className="inline-input" type="number" value={editForm.materials} onChange={e=>upField("materials",Number(e.target.value))} style={{width:"80px"}}/>:fmtKES(dw.materials)}</td>
-                      <td style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"10px",fontWeight:"800",color:PROV_SCC[dw.status]||"#A0AEC0"}}>{fmtKES(tot)}</td>
-                      <td style={{fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>{isEdit?<input className="inline-input" value={editForm.authorisedBy} onChange={e=>upField("authorisedBy",e.target.value)} style={{width:"50px"}}/>:dw.authorisedBy||"—"}</td>
+                      <td style={{fontSize:"10px",color:"var(--text3)"}}>{isEdit?<input className="inline-input" value={editForm.authorisedBy||""} onChange={e=>upField("authorisedBy",e.target.value)} style={{width:"80px"}}/>:dw.authorisedBy||"—"}</td>
                       <td>
                         {isEdit
                           ?<div style={{display:"flex",gap:"4px"}}>
@@ -2663,15 +3072,64 @@ function ProvisionsView({provisions,setProvisions,site,phases}){
               </tbody>
               <tfoot>
                 <tr style={{background:"var(--bg)"}}>
-                  <td colSpan={4} style={{fontFamily:"'Share Tech Mono',monospace",fontWeight:"800",color:"var(--text)",fontSize:"10px"}}>TOTALS</td>
-                  <td style={{fontFamily:"'Share Tech Mono',monospace",fontWeight:"800",color:"var(--accent)"}}>{fmtKES(dayworks.reduce((s,d)=>s+d.labour,0))}</td>
-                  <td style={{fontFamily:"'Share Tech Mono',monospace",fontWeight:"800",color:"var(--purple)"}}>{fmtKES(dayworks.reduce((s,d)=>s+d.plant,0))}</td>
-                  <td style={{fontFamily:"'Share Tech Mono',monospace",fontWeight:"800",color:"var(--amber)"}}>{fmtKES(dayworks.reduce((s,d)=>s+d.materials,0))}</td>
-                  <td style={{fontFamily:"'Share Tech Mono',monospace",fontWeight:"800",color:"var(--text)"}}>{fmtKES(dwTotal)}</td>
-                  <td colSpan={2}></td>
+                  <td colSpan={6} style={{fontFamily:"'Share Tech Mono',monospace",fontWeight:"800",color:"var(--text)",fontSize:"10px"}}>TOTALS</td>
+                  <td style={{fontFamily:"'Share Tech Mono',monospace",fontWeight:"800",color:"var(--green)"}}>{fmtKES(dwApproved)}</td>
+                  <td colSpan={3}></td>
                 </tr>
               </tfoot>
             </table>
+          </div>
+
+          {/* MOBILE CARDS */}
+          <div className="prov-mobile-cards" style={{display:"none"}}>
+            {dayworks.length===0&&<div style={{textAlign:"center",padding:"28px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",fontSize:"10px"}}>No dayworks records yet · Tap + Add Dayworks</div>}
+            {dayworks.map((dw,i)=>{
+              const dwItemTotal=(dw.labour||0)+(dw.plant||0)+(dw.materials||0);
+              return(
+                <div key={dw.id} className="prov-card">
+                  <div className="prov-card-accent" style={{background:PROV_SCC[dw.status]||"#A0AEC0"}}/>
+                  <div style={{marginLeft:"10px"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"4px"}}>
+                      <span className="prov-card-id" style={{color:PROV_SCC[dw.status]||"#A0AEC0"}}>{dw.id}</span>
+                      <div style={{display:"flex",gap:"5px",alignItems:"center"}}>
+                        <Badge label={dw.status} color={PROV_SCC[dw.status]||"#A0AEC0"}/>
+                        <span style={{fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>{dw.date}</span>
+                      </div>
+                    </div>
+                    <div className="prov-card-desc">{dw.description}</div>
+                    <div className="prov-card-amounts">
+                      <div className="prov-card-amount-cell">
+                        <div className="prov-card-amount-val" style={{color:"var(--text)"}}>{fmtKES(dw.labour||0)}</div>
+                        <div className="prov-card-amount-lbl">Labour</div>
+                      </div>
+                      <div className="prov-card-amount-cell">
+                        <div className="prov-card-amount-val" style={{color:"var(--text)"}}>{fmtKES(dw.plant||0)}</div>
+                        <div className="prov-card-amount-lbl">Plant</div>
+                      </div>
+                      <div className="prov-card-amount-cell">
+                        <div className="prov-card-amount-val" style={{color:"var(--text)"}}>{fmtKES(dw.materials||0)}</div>
+                        <div className="prov-card-amount-lbl">Materials</div>
+                      </div>
+                      <div className="prov-card-amount-cell">
+                        <div className="prov-card-amount-val" style={{color:dw.status==="approved"?"var(--green)":"var(--text)"}}>{fmtKES(dwItemTotal)}</div>
+                        <div className="prov-card-amount-lbl">Total</div>
+                      </div>
+                    </div>
+                    {dw.authorisedBy&&<div style={{marginTop:"6px",fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>Auth: {dw.authorisedBy}</div>}
+                    <div className="prov-card-actions">
+                      <button className="btn-ghost" style={{flex:1,padding:"7px",fontSize:"10px"}} onClick={()=>startEdit("dayworks",i)}>✏ Edit</button>
+                      <button className="btn-danger" style={{padding:"7px 12px",fontSize:"10px"}} onClick={()=>removeItem("dayworks",i)}>🗑</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {dayworks.length>0&&(
+              <div style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"14px",padding:"14px 16px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",textAlign:"center"}}>
+                <div><div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",fontWeight:"800",color:"var(--green)"}}>{fmtKES(dwApproved)}</div><div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"7.5px",color:"var(--text4)",textTransform:"uppercase",marginTop:"2px"}}>Approved Total</div></div>
+                <div><div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",fontWeight:"800",color:"var(--amber)"}}>{fmtKES(dwTotal)}</div><div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"7.5px",color:"var(--text4)",textTransform:"uppercase",marginTop:"2px"}}>Claimed Total</div></div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -3147,7 +3605,7 @@ function REReport({site,phases,wps,risks,snags,team,diaries,materials}){
               {l:"Overall Progress",v:`${totalProgress}%`,c:"#3182CE",sub:`${phases.filter(p=>p.status==="in-progress").length} phases active`},
               {l:"Budget Utilised",v:`${pct(totalSpent,totalBudget)}%`,c:pct(totalSpent,totalBudget)>95?"#E53E3E":"#D69E2E",sub:`${fmtKES(totalSpent)} of ${fmtKES(totalBudget)}`},
               {l:"Open Risks",v:openRisks.length,c:openRisks.filter(r=>r.severity==="critical").length>0?"#E53E3E":"#D69E2E",sub:`${openRisks.filter(r=>r.severity==="critical").length} critical`},
-              {l:"Days to Completion",v:daysLeft!==null?daysLeft:"—",c:daysLeft<180?"#D69E2E":"#3182CE",sub:site.targetCompletion||"Not set"},
+              {l:"Days to Completion",v:daysLeft!==null?daysLeft:"—",c:daysLeft!=null&&daysLeft<180?"#D69E2E":"#3182CE",sub:site.targetCompletion||"Not set"},
             ].map(k=>(
               <div key={k.l} style={{border:`1px solid ${k.c}33`,borderRadius:"8px",padding:"12px 14px",background:`${k.c}08`}}>
                 <div style={{fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",textTransform:"uppercase",marginBottom:"4px"}}>{k.l}</div>
@@ -5180,6 +5638,365 @@ const readInviteToken = () => {
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
 
 /* ── AUTH SCREEN — Login · Sign Up · Guest mode · Password reset ── */
+// ══════════════════════════════════════════════════════════════
+//  MULTI-TENANT ORG ENGINE
+// ══════════════════════════════════════════════════════════════
+
+const ORG_KEY = 'mradi_org';
+
+const genId  = (n=12) => Array.from(crypto.getRandomValues(new Uint8Array(n))).map(b=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[b%36]).join('');
+const genCode = ()    => genId(6);
+
+const getOrg = () => { try{ return JSON.parse(localStorage.getItem(ORG_KEY))||null; }catch{ return null; } };
+const saveOrg = (org) => { try{ localStorage.setItem(ORG_KEY, JSON.stringify(org)); }catch{} return org; };
+
+const getOrgRole   = () => { try{ return JSON.parse(localStorage.getItem('mradi_profile')||'{}').orgRole||null; }catch{ return null; } };
+const getOrgId     = () => { try{ return JSON.parse(localStorage.getItem('mradi_profile')||'{}').orgId||null; }catch{ return null; } };
+
+const avatarColor = (name='?') => {
+  const palette = ['#E53E3E','#D69E2E','#38A169','#3182CE','#805AD5','#DD6B20','#00B5D8','#B83280'];
+  let h = 0; for(let i=0;i<name.length;i++) h = (h*31+name.charCodeAt(i))&0xffff;
+  return palette[h % palette.length];
+};
+
+// ─── OrgSetupScreen ────────────────────────────────────────────
+function OrgSetupScreen({ profile, onDone, prefillCode }) {
+  const {useState:uS} = React;
+  const [mode,    setMode]    = uS(prefillCode ? 'join' : null); // null | 'create' | 'join'
+  const [orgName, setOrgName] = uS('');
+  const [code,    setCode]    = uS(prefillCode||'');
+  const [step,    setStep]    = uS(prefillCode ? 'join' : 'choose'); // 'choose'|'create'|'join'|'done'
+  const [created, setCreated] = uS(null); // newly created org
+  const [error,   setError]   = uS('');
+  const [loading, setLoading] = uS(false);
+  const IS = {width:'100%',padding:'11px 13px',background:'var(--input-bg)',border:'1px solid var(--border)',borderRadius:'8px',color:'var(--text)',fontFamily:"'Barlow',sans-serif",fontSize:'13px',outline:'none',boxSizing:'border-box',marginBottom:'12px'};
+  const LS = {fontFamily:"'Share Tech Mono',monospace",fontSize:'9px',color:'var(--text4)',textTransform:'uppercase',letterSpacing:'0.1em',display:'block',marginBottom:'5px'};
+
+  const createOrg = () => {
+    if(!orgName.trim()) { setError('Enter your organisation name.'); return; }
+    setLoading(true);
+    const org = saveOrg({
+      id: genId(16),
+      name: orgName.trim(),
+      inviteCode: genCode(),
+      adminId: profile.id,
+      adminName: profile.name,
+      createdAt: new Date().toISOString(),
+      members: [{ id:profile.id, name:profile.name, email:profile.email, role:'admin', joinedAt:new Date().toISOString() }],
+    });
+    saveLocalProfile({ orgId:org.id, orgRole:'admin', orgName:org.name });
+    setCreated(org);
+    setStep('done');
+    setLoading(false);
+  };
+
+  const joinOrg = () => {
+    const upper = code.trim().toUpperCase();
+    if(upper.length !== 6) { setError('Enter the 6-character invite code.'); return; }
+    // Check if org with this invite code exists locally
+    const existing = getOrg();
+    if(!existing || existing.inviteCode !== upper) {
+      setError('Code not found. Ask your admin to share the invite link — it will load the org automatically.');
+      return;
+    }
+    // Add member
+    const member = { id:profile.id, name:profile.name, email:profile.email||'', role:'member', joinedAt:new Date().toISOString() };
+    const already = existing.members.find(m=>m.id===profile.id);
+    if(!already) existing.members.push(member);
+    saveOrg(existing);
+    saveLocalProfile({ orgId:existing.id, orgRole:'member', orgName:existing.name });
+    onDone(getLocalProfile());
+  };
+
+  const inviteLink = created ? `${location.origin}${location.pathname}?join=${created.inviteCode}` : '';
+
+  return (
+    <div className="org-setup-screen">
+      <div className="org-box">
+        {/* Header */}
+        <div style={{display:'flex',alignItems:'center',gap:'12px',marginBottom:'24px'}}>
+          <div style={{width:'44px',height:'44px',background:'var(--accent)',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'22px',color:'#fff',flexShrink:0}}>🏗</div>
+          <div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'22px',letterSpacing:'0.07em',color:'var(--text)',lineHeight:1}}>Welcome, {profile.name?.split(' ')[0]||'there'}!</div>
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:'8px',color:'var(--text4)',letterSpacing:'0.16em',textTransform:'uppercase',marginTop:'2px'}}>Set up your organisation</div>
+          </div>
+        </div>
+
+        {/* STEP: CHOOSE */}
+        {step==='choose'&&(
+          <>
+            <div style={{fontSize:'13px',color:'var(--text2)',marginBottom:'20px',lineHeight:1.5}}>
+              Mradi HQ is built for teams. Create your organisation or join an existing one.
+            </div>
+            <div className="org-mode-grid">
+              <button className={`org-mode-btn ${mode==='create'?'selected':''}`} onClick={()=>{setMode('create');setStep('create');}}>
+                <span className="org-mode-icon">🏗</span>
+                <span className="org-mode-label">Create Org</span>
+                <span className="org-mode-sub">Set up a new organisation and invite your team</span>
+              </button>
+              <button className={`org-mode-btn ${mode==='join'?'selected':''}`} onClick={()=>{setMode('join');setStep('join');}}>
+                <span className="org-mode-icon">👥</span>
+                <span className="org-mode-label">Join Org</span>
+                <span className="org-mode-sub">Enter an invite code from your admin</span>
+              </button>
+            </div>
+            <button onClick={()=>onDone(profile)} style={{width:'100%',padding:'10px',background:'none',border:'1px dashed var(--border2)',borderRadius:'8px',color:'var(--text4)',fontFamily:"'Share Tech Mono',monospace",fontSize:'9px',cursor:'pointer',marginTop:'4px'}}>
+              Skip for now — continue solo
+            </button>
+          </>
+        )}
+
+        {/* STEP: CREATE */}
+        {step==='create'&&(
+          <>
+            <button onClick={()=>setStep('choose')} style={{background:'none',border:'none',color:'var(--text4)',fontFamily:"'Share Tech Mono',monospace",fontSize:'9px',cursor:'pointer',marginBottom:'16px',padding:'0',display:'flex',alignItems:'center',gap:'4px'}}>← Back</button>
+            <div style={{fontSize:'15px',fontWeight:'800',color:'var(--text)',marginBottom:'16px'}}>🏗 Create Your Organisation</div>
+            {error&&<div style={{background:'var(--red)15',border:'1px solid var(--red)44',borderRadius:'6px',padding:'10px',marginBottom:'12px',fontSize:'11px',color:'var(--red)',fontFamily:"'Share Tech Mono',monospace"}}>{error}</div>}
+            <label style={LS}>Organisation / Company Name</label>
+            <input style={IS} placeholder="e.g. Mradi Construction Ltd" value={orgName} onChange={e=>{setOrgName(e.target.value);setError('');}} onKeyDown={e=>e.key==='Enter'&&createOrg()} autoFocus/>
+            <div style={{fontSize:'11px',color:'var(--text3)',marginBottom:'16px',lineHeight:1.5}}>
+              An invite code and link will be generated — share it with your team so they can join this organisation.
+            </div>
+            <button className="btn-primary" style={{width:'100%',padding:'13px',fontSize:'11px',opacity:loading?0.6:1}} onClick={createOrg} disabled={loading}>
+              {loading?'Creating…':'🏗 Create Organisation →'}
+            </button>
+          </>
+        )}
+
+        {/* STEP: JOIN */}
+        {step==='join'&&(
+          <>
+            {!prefillCode&&<button onClick={()=>setStep('choose')} style={{background:'none',border:'none',color:'var(--text4)',fontFamily:"'Share Tech Mono',monospace",fontSize:'9px',cursor:'pointer',marginBottom:'16px',padding:'0',display:'flex',alignItems:'center',gap:'4px'}}>← Back</button>}
+            <div style={{fontSize:'15px',fontWeight:'800',color:'var(--text)',marginBottom:'16px'}}>👥 Join an Organisation</div>
+            {error&&<div style={{background:'var(--red)15',border:'1px solid var(--red)44',borderRadius:'6px',padding:'10px',marginBottom:'12px',fontSize:'11px',color:'var(--red)',fontFamily:"'Share Tech Mono',monospace"}}>{error}</div>}
+            <label style={LS}>6-Character Invite Code</label>
+            <input style={{...IS,fontFamily:"'Bebas Neue',sans-serif",fontSize:'28px',letterSpacing:'0.3em',textAlign:'center',textTransform:'uppercase'}}
+              placeholder="ABC123" maxLength={6} value={code}
+              onChange={e=>{setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,''));setError('');}}
+              onKeyDown={e=>e.key==='Enter'&&joinOrg()} autoFocus={!!prefillCode}/>
+            <div style={{fontSize:'11px',color:'var(--text3)',marginBottom:'16px',lineHeight:1.5}}>
+              Your admin should share a 6-character code or an invite link. If using an invite link, this field is filled automatically.
+            </div>
+            <button className="btn-primary" style={{width:'100%',padding:'13px',fontSize:'11px'}} onClick={joinOrg}>
+              👥 Join Organisation →
+            </button>
+          </>
+        )}
+
+        {/* STEP: DONE (org created) */}
+        {step==='done'&&created&&(
+          <>
+            <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'16px'}}>
+              <div style={{width:'40px',height:'40px',background:'var(--green)15',border:'2px solid var(--green)44',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',flexShrink:0}}>✓</div>
+              <div>
+                <div style={{fontSize:'15px',fontWeight:'800',color:'var(--text)'}}>{created.name}</div>
+                <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:'8px',color:'var(--green)',textTransform:'uppercase',letterSpacing:'0.1em',marginTop:'2px'}}>Organisation Created · You are Admin</div>
+              </div>
+            </div>
+            <div style={{fontSize:'12px',color:'var(--text3)',marginBottom:'12px',lineHeight:1.5}}>Share this invite code with your team — they can use it or click the invite link to join your organisation.</div>
+            <div className="invite-code-box">
+              <div className="invite-code-val">{created.inviteCode}</div>
+              <div className="invite-code-lbl">Invite Code · Share with your team</div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'20px',marginTop:'4px'}}>
+              <button className="btn-ghost" style={{padding:'9px',fontSize:'9px',display:'flex',alignItems:'center',justifyContent:'center',gap:'5px'}}
+                onClick={()=>{navigator.clipboard?.writeText(created.inviteCode);alert('Invite code copied!');}}>
+                📋 Copy Code
+              </button>
+              <button className="btn-ghost" style={{padding:'9px',fontSize:'9px',display:'flex',alignItems:'center',justifyContent:'center',gap:'5px'}}
+                onClick={()=>{navigator.clipboard?.writeText(inviteLink);alert('Invite link copied!');}}>
+                🔗 Copy Invite Link
+              </button>
+            </div>
+            {/* WhatsApp */}
+            <a href={`https://wa.me/?text=${encodeURIComponent(`You're invited to join ${created.name} on Mradi HQ! Tap the link to get started:\n${inviteLink}`)}`}
+              target="_blank" rel="noopener"
+              style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'8px',width:'100%',padding:'11px',background:'#25D366',color:'#fff',borderRadius:'8px',textDecoration:'none',fontFamily:"'Share Tech Mono',monospace",fontSize:'10px',fontWeight:'800',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'16px'}}>
+              📲 Send via WhatsApp
+            </a>
+            <button className="btn-primary" style={{width:'100%',padding:'13px',fontSize:'11px'}} onClick={()=>onDone(getLocalProfile())}>
+              Continue to App →
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── OrgPanel (admin management panel) ─────────────────────────
+function OrgPanel({ profile, onClose, showToast }) {
+  const {useState:uS} = React;
+  const [tab, setTab] = uS('members');
+  const [copied, setCopied] = uS(false);
+  const org = getOrg();
+  const isAdmin = profile?.orgRole === 'admin';
+  const inviteLink = org ? `${location.origin}${location.pathname}?join=${org.inviteCode}` : '';
+
+  const regenCode = () => {
+    if(!isAdmin||!org) return;
+    org.inviteCode = genCode();
+    saveOrg(org);
+    if(showToast) showToast('New invite code generated');
+  };
+
+  const removeMember = (memberId) => {
+    if(!isAdmin||!org||memberId===org.adminId) return;
+    org.members = org.members.filter(m=>m.id!==memberId);
+    saveOrg(org);
+    if(showToast) showToast('Member removed');
+    // force re-render
+    window.dispatchEvent(new Event('mradi_org_update'));
+  };
+
+  const copyInvite = (text) => {
+    navigator.clipboard?.writeText(text);
+    setCopied(true);
+    setTimeout(()=>setCopied(false), 2000);
+    if(showToast) showToast('Copied to clipboard!');
+  };
+
+  if(!org) return (
+    <><div className="org-panel-overlay" onClick={onClose}/>
+    <div className="org-panel" style={{padding:'32px',textAlign:'center'}}>
+      <div style={{fontSize:'32px',marginBottom:'12px'}}>🏗</div>
+      <div style={{fontSize:'15px',fontWeight:'800',color:'var(--text)',marginBottom:'8px'}}>No Organisation Yet</div>
+      <div style={{fontSize:'12px',color:'var(--text3)',marginBottom:'20px',lineHeight:1.5}}>You haven't created or joined an organisation yet. Set one up to invite your team.</div>
+      <button className="btn-primary" style={{padding:'12px 24px'}} onClick={onClose}>Close</button>
+    </div></>
+  );
+
+  const TABS=[['members','👥 Members'],['invite','🔗 Invite'],['settings','⚙ Settings']];
+
+  return (
+    <><div className="org-panel-overlay" onClick={onClose}/>
+    <div className="org-panel">
+      {/* Header */}
+      <div style={{padding:'20px 24px 16px',borderBottom:'1px solid var(--border)',position:'sticky',top:0,background:'var(--modal-bg)',zIndex:1}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div>
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:'9px',color:'var(--text4)',textTransform:'uppercase',letterSpacing:'0.12em',marginBottom:'3px'}}>Organisation</div>
+            <div style={{fontSize:'18px',fontWeight:'900',color:'var(--text)',lineHeight:1}}>{org.name}</div>
+            <div style={{display:'flex',gap:'6px',alignItems:'center',marginTop:'5px'}}>
+              <span className={`role-badge ${profile?.orgRole||'member'}`}>{profile?.orgRole==='admin'?'🔑 Admin':'👥 Member'}</span>
+              <span style={{fontFamily:"'Share Tech Mono',monospace",fontSize:'8px',color:'var(--text4)'}}>{org.members.length} member{org.members.length!==1?'s':''}</span>
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:'none',border:'none',color:'var(--text3)',fontSize:'20px',cursor:'pointer',padding:'4px',lineHeight:1}}>✕</button>
+        </div>
+        {/* Tab bar */}
+        <div style={{display:'flex',gap:'2px',marginTop:'14px'}}>
+          {TABS.map(([id,label])=>(
+            <button key={id} onClick={()=>setTab(id)}
+              style={{flex:1,padding:'7px 4px',border:'none',borderRadius:'6px',fontFamily:"'Share Tech Mono',monospace",fontSize:'8.5px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.06em',cursor:'pointer',transition:'all 0.15s',
+                background:tab===id?'var(--accent)':'none',color:tab===id?'#fff':'var(--text3)'}}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{padding:'20px 24px'}}>
+
+        {/* MEMBERS TAB */}
+        {tab==='members'&&(
+          <div>
+            <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:'9px',color:'var(--text4)',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:'12px'}}>
+              {org.members.length} Team Member{org.members.length!==1?'s':''}
+            </div>
+            {org.members.map(m=>(
+              <div key={m.id} className="org-member-row">
+                <div className="org-member-avatar" style={{background:avatarColor(m.name)}}>
+                  {(m.name||'?')[0].toUpperCase()}
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div className="org-member-name">{m.name||'Unknown'}</div>
+                  <div className="org-member-meta">{m.email||'No email'} · Joined {m.joinedAt?new Date(m.joinedAt).toLocaleDateString('en-KE',{day:'2-digit',month:'short',year:'numeric'}):'—'}</div>
+                </div>
+                <div style={{display:'flex',gap:'6px',alignItems:'center',flexShrink:0}}>
+                  <span className={`role-badge ${m.role}`}>{m.role==='admin'?'🔑 Admin':'👥 Member'}</span>
+                  {isAdmin&&m.id!==org.adminId&&(
+                    <button onClick={()=>removeMember(m.id)}
+                      style={{background:'none',border:'1px solid var(--red)44',color:'var(--red)',borderRadius:'6px',padding:'3px 7px',fontFamily:"'Share Tech Mono',monospace",fontSize:'8px',cursor:'pointer',transition:'all 0.15s'}}
+                      onMouseEnter={e=>e.currentTarget.style.background='var(--red)12'}
+                      onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+            {org.members.length===1&&(
+              <div style={{textAlign:'center',padding:'24px',color:'var(--text4)',fontFamily:"'Share Tech Mono',monospace",fontSize:'10px',background:'var(--bg)',borderRadius:'12px',marginTop:'8px'}}>
+                No team members yet — go to Invite tab to add people
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* INVITE TAB */}
+        {tab==='invite'&&(
+          <div>
+            <div className="invite-code-box">
+              <div className="invite-code-val">{org.inviteCode}</div>
+              <div className="invite-code-lbl">Invite Code · Share with your team</div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',margin:'12px 0'}}>
+              <button className="btn-ghost" style={{padding:'10px',fontSize:'9px',display:'flex',alignItems:'center',justifyContent:'center',gap:'5px'}}
+                onClick={()=>copyInvite(org.inviteCode)}>
+                {copied?'✓ Copied!':'📋 Copy Code'}
+              </button>
+              <button className="btn-ghost" style={{padding:'10px',fontSize:'9px',display:'flex',alignItems:'center',justifyContent:'center',gap:'5px'}}
+                onClick={()=>copyInvite(inviteLink)}>
+                🔗 Copy Link
+              </button>
+            </div>
+            <a href={`https://wa.me/?text=${encodeURIComponent(`You're invited to join ${org.name} on Mradi HQ!\nTap the link to join:\n${inviteLink}`)}`}
+              target="_blank" rel="noopener"
+              style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'8px',width:'100%',padding:'12px',background:'#25D366',color:'#fff',borderRadius:'10px',textDecoration:'none',fontFamily:"'Share Tech Mono',monospace",fontSize:'10px',fontWeight:'800',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'16px'}}>
+              📲 Send via WhatsApp
+            </a>
+            <div style={{background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'10px',padding:'12px',fontFamily:"'Share Tech Mono',monospace",fontSize:'9px',color:'var(--text4)',lineHeight:1.8,wordBreak:'break-all'}}>
+              {inviteLink}
+            </div>
+            {isAdmin&&(
+              <button className="btn-ghost" style={{marginTop:'12px',width:'100%',fontSize:'9px',padding:'9px',color:'var(--amber)',borderColor:'var(--amber)44'}} onClick={regenCode}>
+                🔄 Generate New Invite Code
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* SETTINGS TAB */}
+        {tab==='settings'&&(
+          <div>
+            <div style={{background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'12px',padding:'16px',marginBottom:'12px'}}>
+              <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:'9px',color:'var(--text4)',textTransform:'uppercase',marginBottom:'10px',letterSpacing:'0.1em'}}>Organisation Info</div>
+              <div style={{display:'flex',gap:'10px',marginBottom:'6px'}}><span style={{fontFamily:"'Share Tech Mono',monospace",fontSize:'9px',color:'var(--text4)',width:'80px',flexShrink:0}}>Name</span><span style={{fontSize:'12px',fontWeight:'700',color:'var(--text)'}}>{org.name}</span></div>
+              <div style={{display:'flex',gap:'10px',marginBottom:'6px'}}><span style={{fontFamily:"'Share Tech Mono',monospace",fontSize:'9px',color:'var(--text4)',width:'80px',flexShrink:0}}>Admin</span><span style={{fontSize:'12px',color:'var(--text)'}}>{org.adminName||org.members.find(m=>m.role==='admin')?.name||'—'}</span></div>
+              <div style={{display:'flex',gap:'10px',marginBottom:'6px'}}><span style={{fontFamily:"'Share Tech Mono',monospace",fontSize:'9px',color:'var(--text4)',width:'80px',flexShrink:0}}>Created</span><span style={{fontSize:'12px',color:'var(--text)'}}>{org.createdAt?new Date(org.createdAt).toLocaleDateString('en-KE',{day:'2-digit',month:'short',year:'numeric'}):'—'}</span></div>
+              <div style={{display:'flex',gap:'10px'}}><span style={{fontFamily:"'Share Tech Mono',monospace",fontSize:'9px',color:'var(--text4)',width:'80px',flexShrink:0}}>Members</span><span style={{fontSize:'12px',color:'var(--text)'}}>{org.members.length}</span></div>
+            </div>
+            <div style={{fontSize:'11px',color:'var(--text3)',lineHeight:1.6,padding:'12px',background:'var(--amber)10',border:'1px solid var(--amber)33',borderRadius:'10px',marginBottom:'12px'}}>
+              <strong style={{color:'var(--amber)'}}>ℹ Admin note:</strong> Organisation data is stored locally on this device. Use the same device to manage members, or share the invite link for team members to join.
+            </div>
+            {!isAdmin&&(
+              <button onClick={()=>{
+                if(window.confirm('Leave this organisation? You can rejoin using the invite code.')){
+                  saveLocalProfile({orgId:null,orgRole:null,orgName:null});
+                  onClose();
+                }
+              }} style={{width:'100%',padding:'11px',background:'none',border:'1px solid var(--red)44',borderRadius:'8px',color:'var(--red)',fontFamily:"'Share Tech Mono',monospace",fontSize:'9px',fontWeight:'700',cursor:'pointer',textTransform:'uppercase',letterSpacing:'0.06em'}}>
+                🚪 Leave Organisation
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div></>
+  );
+}
+
 function AuthScreen({ onDone }) {
   const [mode,     setMode]     = useState("login"); // "login" | "signup" | "reset"
   const [email,    setEmail]    = useState("");
@@ -6614,9 +7431,12 @@ function App(){
   // ── Auth & Profile state ──────────────────────────────────────────────────
   const [profile, setProfile] = useState(()=>getLocalProfile());
   // Show auth screen if user has no email (never logged in with account)
-  const [showAuth, setShowAuth] = useState(()=>!getLocalProfile()?.email);
+  const [showAuth, setShowAuth] = useState(()=>{ const _p=getLocalProfile(); return !_p?.email && !_p?.isGuest; });
   const [showProfileSetup, setShowProfileSetup] = useState(false); // legacy compat
-  const [showOrgPanel, setShowOrgPanel] = useState(false);
+  const [showOrgPanel, setShowOrgPanel] = useState(false);   // AccountPanel (profile/addons)
+  const [showOrgMgmt,  setShowOrgMgmt]  = useState(false);   // OrgPanel (team/invite/admin)
+  const [showOrgSetup, setShowOrgSetup] = useState(false);   // OrgSetupScreen (first-time)
+  const [orgSetupJoinCode, setOrgSetupJoinCode] = useState(null); // prefill code from ?join=
   const [showPremium, setShowPremium] = useState(null); // addonId or null
   const [addons, setAddons] = useState(getAddons);
   const refreshAddons = () => setAddons(getAddons());
@@ -6626,7 +7446,15 @@ function App(){
   const handleAuthDone = (p) => {
     setProfile(p);
     setShowAuth(false);
-    // Queue cloud sync for after showToast is declared (avoids hooks ordering issue)
+    // Gate 1.5: show org setup if user has no org yet
+    if(!p?.isGuest && !getOrg()) {
+      const joinCode = window.__FCC_JOIN_CODE__ || null;
+      if(joinCode) { setOrgSetupJoinCode(joinCode); window.__FCC_JOIN_CODE__ = null; try{ document.getElementById('fcc-join-loader')?.remove(); }catch{} }
+      setShowOrgSetup(true);
+      return;
+    }
+    // Remove join loader if present
+    try{ document.getElementById('fcc-join-loader')?.remove(); }catch{}
     if(p?.id && !p.isGuest) window.__pendingCloudSync = p.id;
   };
 
@@ -6749,6 +7577,8 @@ function App(){
   const [syncing,setSyncing]   = useState(false);
   const [lastSync,setLastSync] = useState(()=>load("ahp_lastSync")||null);
   const [showMobileMenu,setShowMobileMenu] = useState(false);
+  const [navOpen,setNavOpen] = useState(false);
+  const navTriggerRef = React.useRef(null);
   // ── Realtime presence ────────────────────────────────────────────────────────
   const [presenceUsers, setPresenceUsers] = useState([]); // other users in same project
   const channelRef = useRef(null);
@@ -7210,6 +8040,19 @@ function App(){
     return <AuthScreen onDone={handleAuthDone}/>;
   }
 
+  // ── Gate 1.5: Org Setup (first time after auth, or ?join= link) ──
+  if(showOrgSetup){
+    return <OrgSetupScreen
+      profile={profile}
+      prefillCode={orgSetupJoinCode}
+      onDone={(p)=>{
+        setProfile(p||getLocalProfile());
+        setShowOrgSetup(false);
+        if(p?.id && !p.isGuest) window.__pendingCloudSync = p.id;
+      }}
+    />;
+  }
+
   // ── Gate 2: Landing page ──
   if(showLanding){
     return <LandingPage theme={theme} setTheme={setTheme} largeText={largeText} setLargeText={setLargeText} onEnter={enterApp}/>;
@@ -7254,6 +8097,7 @@ function App(){
       {showIntegration&&<IntegrationHub proj={proj} onImport={handleImport} onClose={()=>setShowIntegration(false)} showToast={showToast}/>}
 
       {showOrgPanel&&<AccountPanel profile={profile} onClose={()=>setShowOrgPanel(false)} onProfileSaved={p=>setProfile(p)} showToast={showToast}/>}
+      {showOrgMgmt&&<OrgPanel profile={profile} onClose={()=>setShowOrgMgmt(false)} showToast={showToast}/>}
       {showShareModal&&<ShareSnapshotModal proj={proj} diaries={diaries} materials={materials} provisions={provisions} onClose={()=>setShowShareModal(false)} showToast={showToast} currentUserId={profile?.id||null}/>}
       {showTeamRoom&&(
         <TeamRoomPanel
@@ -7335,11 +8179,62 @@ function App(){
             </div>
             <div className="mob-drawer-body">
 
+              {/* ── NAV SHORTCUTS — quick-jump to any screen ── */}
+              <div className="mob-drawer-section">
+                <div className="mob-drawer-section-label">📍 Navigate</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px"}}>
+                  {NAV.map(({id,label,icon})=>(
+                    <button key={id}
+                      className="mob-drawer-btn"
+                      style={{
+                        borderRadius:"12px",padding:"10px 12px",marginBottom:0,
+                        borderColor:view===id?"var(--accent)":"var(--border)",
+                        background:view===id?"var(--accent)12":"var(--bg)",
+                        color:view===id?"var(--accent)":"var(--text)",
+                        fontWeight:view===id?"800":"400",
+                      }}
+                      onClick={()=>{setView(id);setShowMobileMenu(false);}}>
+                      <span style={{fontSize:"18px"}}>{icon}</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:"10px",fontWeight:"inherit"}}>{label}</div>
+                      </div>
+                      {view===id&&<span style={{fontSize:"10px",color:"var(--accent)"}}>●</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Admin / Account */}
               <div className="mob-drawer-section">
                 <div className="mob-drawer-section-label">👤 Account & Admin</div>
+
+                {/* ORG BLOCK */}
+                {profile?.orgName ? (
+                  <button className="mob-drawer-btn" onClick={()=>{setShowMobileMenu(false);setShowOrgMgmt(true);}}
+                    style={{marginBottom:"6px",borderColor:"var(--accent)33",background:"var(--accent)08"}}>
+                    <div style={{width:"32px",height:"32px",borderRadius:"8px",background:"var(--accent)20",border:"1px solid var(--accent)44",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"16px",flexShrink:0}}>🏗</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:"11px",fontWeight:"700",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{profile.orgName}</div>
+                      <div style={{fontSize:"8px",opacity:0.8,marginTop:"1px",display:"flex",alignItems:"center",gap:"4px"}}>
+                        <span style={{color:profile.orgRole==="admin"?"var(--amber)":"var(--green)",fontWeight:"700",textTransform:"uppercase"}}>{profile.orgRole==="admin"?"🔑 Admin":"👥 Member"}</span>
+                        <span>· Team &amp; Invite →</span>
+                      </div>
+                    </div>
+                  </button>
+                ) : (
+                  <button className="mob-drawer-btn" onClick={()=>{setShowMobileMenu(false);setShowOrgSetup(true);}}
+                    style={{marginBottom:"6px",borderColor:"var(--border2)",borderStyle:"dashed"}}>
+                    <div style={{width:"32px",height:"32px",borderRadius:"8px",background:"var(--bg)",border:"1px dashed var(--border2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"16px",flexShrink:0}}>🏗</div>
+                    <div>
+                      <div style={{fontSize:"11px",fontWeight:"700"}}>Create or Join Org</div>
+                      <div style={{fontSize:"8px",opacity:0.7,marginTop:"1px"}}>Invite your team · Manage access</div>
+                    </div>
+                    <span style={{marginLeft:"auto",fontSize:"12px",color:"var(--accent)"}}>›</span>
+                  </button>
+                )}
+
                 <button className="mob-drawer-btn admin" onClick={()=>{setShowMobileMenu(false);setShowOrgPanel(true);}}>
-                  <div style={{width:"32px",height:"32px",borderRadius:"50%",background:"var(--amber)20",border:"2px solid var(--amber)55",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Share Tech Mono',monospace",fontSize:"13px",fontWeight:"700",color:"var(--amber)",flexShrink:0}}>
+                  <div style={{width:"32px",height:"32px",borderRadius:"50%",background:`${avatarColor(profile?.name||"?")}25`,border:`2px solid ${avatarColor(profile?.name||"?")}55`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Share Tech Mono',monospace",fontSize:"13px",fontWeight:"700",color:avatarColor(profile?.name||"?"),flexShrink:0}}>
                     {(profile?.name||"?")[0].toUpperCase()}
                   </div>
                   <div>
@@ -7478,7 +8373,7 @@ function App(){
       )}
 
       {/* HEADER */}
-      <header style={{borderBottom:"1px solid var(--border)",padding:"0 12px",background:"var(--header-bg)",display:"flex",alignItems:"center",gap:"8px",height:"54px",position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",overflow:"hidden",minWidth:0}}>
+      <header style={{borderBottom:"1px solid var(--border)",padding:"0 12px",background:"var(--header-bg)",display:"flex",alignItems:"center",gap:"8px",height:"54px",position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",minWidth:0,overflow:"visible"}}>
         {/* Project picker — fixed width, never shrinks */}
         <button onClick={()=>setShowProjectPicker(s=>!s)} style={{display:"flex",alignItems:"center",gap:"10px",background:"none",border:"none",cursor:"pointer",paddingRight:"12px",borderRight:"1px solid var(--border)",marginRight:"4px",flexShrink:0}}>
           <div style={{display:"flex",flexDirection:"column",gap:"2px",flexShrink:0}}>
@@ -7491,11 +8386,41 @@ function App(){
           </div>
         </button>
 
-        {/* DESKTOP NAV — flex:1, scrolls horizontally if needed */}
+        {/* DESKTOP NAV — dropdown (navOpen + navTriggerRef live in App) */}
         <nav className="desktop-nav">
-          {NAV.map(({id,label})=>(
-            <button key={id} className={`nav-btn ${view===id?"active":""}`} onClick={()=>setView(id)}>{label}</button>
-          ))}
+          {(()=>{
+            const active = NAV.find(n=>n.id===view)||NAV[0];
+            return <>
+              <button ref={navTriggerRef} className={`nav-trigger ${navOpen?"open":""}`}
+                onClick={()=>setNavOpen(o=>!o)}>
+                <span className="nav-trigger-icon">{active.icon}</span>
+                <span className="nav-trigger-label">{active.label}</span>
+                <span className="nav-trigger-chevron">▼</span>
+              </button>
+              {navOpen&&(
+                <>
+                  <div style={{position:"fixed",inset:0,zIndex:149}} onClick={()=>setNavOpen(false)}/>
+                  <div className="nav-dropdown" style={{
+                    position:"fixed",
+                    top:((navTriggerRef.current?.getBoundingClientRect().bottom)??62)+8+"px",
+                    left:((navTriggerRef.current?.getBoundingClientRect().left)??12)+"px",
+                    zIndex:150,
+                  }}>
+                    <div className="nav-dropdown-grid">
+                      {NAV.map(({id,label,icon})=>(
+                        <button key={id}
+                          className={`nav-drop-item ${view===id?"active":""}`}
+                          onClick={()=>{setView(id);setNavOpen(false);}}>
+                          <span className="nav-drop-icon">{icon}</span>
+                          <span>{label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </>;
+          })()}
         </nav>
 
         {/* RIGHT SIDE — fixed, never grows */}
@@ -7578,13 +8503,27 @@ function App(){
             )}
           </div>
 
-          {/* USER PILL — desktop only */}
+          {/* ORG PILL + USER — desktop only */}
           <div className="hide-mobile hide-tablet" style={{display:"flex",alignItems:"center",gap:"6px",flexShrink:0}}>
+            {/* Org pill — shows org name + role, opens OrgPanel */}
+            {profile?.orgName && (
+              <button className="org-pill" onClick={()=>setShowOrgMgmt(true)} title="Manage Organisation & Team">
+                <div style={{width:"22px",height:"22px",borderRadius:"6px",background:"var(--accent)20",border:"1px solid var(--accent)44",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px",flexShrink:0}}>🏗</div>
+                <span className="org-pill-name">{profile.orgName}</span>
+                <span className={`role-badge ${profile.orgRole||"member"}`} style={{marginLeft:"2px",padding:"2px 5px",fontSize:"7px"}}>{profile.orgRole==="admin"?"Admin":"Member"}</span>
+              </button>
+            )}
+            {!profile?.orgName && (
+              <button className="org-pill" onClick={()=>setShowOrgSetup(true)} title="Set up Organisation">
+                <div style={{width:"22px",height:"22px",borderRadius:"6px",background:"var(--border)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px",flexShrink:0}}>🏗</div>
+                <span className="org-pill-name" style={{color:"var(--text3)"}}>Set up Org</span>
+              </button>
+            )}
             <button onClick={()=>setShowOrgPanel(true)} title="Account & Premium"
               style={{display:"flex",alignItems:"center",gap:"6px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"20px",padding:"4px 10px 4px 4px",cursor:"pointer",transition:"all 0.15s"}}
               onMouseEnter={e=>e.currentTarget.style.borderColor="var(--accent)"}
               onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
-              <div style={{width:"26px",height:"26px",borderRadius:"50%",background:"var(--accent)20",border:"2px solid var(--accent)55",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",fontWeight:"700",color:"var(--accent)",flexShrink:0}}>
+              <div style={{width:"26px",height:"26px",borderRadius:"50%",background:`${avatarColor(profile?.name||"?")}30`,border:`2px solid ${avatarColor(profile?.name||"?")}66`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",fontWeight:"700",color:avatarColor(profile?.name||"?"),flexShrink:0}}>
                 {(profile?.name||"?")[0].toUpperCase()}
               </div>
               <div style={{textAlign:"left"}}>
@@ -7639,119 +8578,272 @@ function App(){
         {/* ── OVERVIEW ── */}
         {view==="overview"&&(
           <div style={{animation:"fadeUp 0.2s ease"}}>
-            <div className="card" style={{padding:"16px 18px",marginBottom:"14px",position:"relative",overflow:"hidden"}}>
-              <div style={{position:"absolute",top:0,left:0,right:0,height:"4px",background:"var(--gradient)"}}/>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:"14px"}}>
-                <div style={{flex:1,minWidth:"200px"}}>
-                  <div style={{fontSize:"20px",fontWeight:"900",color:"var(--text)",lineHeight:1.2}}>{site.name}</div>
-                  <div style={{fontSize:"10px",color:"var(--text3)",fontFamily:"'Share Tech Mono',monospace",marginTop:"4px"}}>{site.location} · {site.land} · {site.PMC}</div>
-                  <div style={{display:"flex",gap:"6px",marginTop:"10px",flexWrap:"wrap"}}>
-                    {site.blocks&&<Badge label={`${site.blocks} Blocks`} color={SCC["in-progress"]}/>}
-                    {site.units&&<Badge label={`${Number(site.units).toLocaleString()} Units`} color={SCC["completed"]}/>}
-                    {site.contractValue&&<Badge label={`Contract: ${fmtKES(site.contractValue)}`} color={SCC["at-risk"]}/>}
-                    {site.targetCompletion&&<Badge label={`Target: ${site.targetCompletion}`} color={SCC["critical"]}/>}
+
+            {/* ══ HERO CARD ══ */}
+            <div className="mob-hero card" style={{marginBottom:"14px"}}>
+              {/* Top row: title + arc */}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"12px",marginBottom:"14px"}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--accent)",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:"4px"}}>🏗 Active Project</div>
+                  <div style={{fontSize:"clamp(16px,4vw,22px)",fontWeight:"900",color:"var(--text)",lineHeight:1.15,wordBreak:"break-word"}}>{site.name}</div>
+                  <div style={{fontSize:"11px",color:"var(--text3)",fontFamily:"'Share Tech Mono',monospace",marginTop:"5px",lineHeight:1.5}}>
+                    {site.location&&<span>{site.location}</span>}
+                    {site.PMC&&<span style={{opacity:0.7}}> · {site.PMC}</span>}
                   </div>
                 </div>
-                <div style={{display:"flex",gap:"16px",alignItems:"center",flexShrink:0}}>
-                  <div style={{textAlign:"center"}}><Arc value={totalProgress} size={64}/><div style={{fontSize:"8px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",marginTop:"2px"}}>OVERALL</div></div>
-                  {daysLeft!==null&&<div style={{textAlign:"center"}}>
-                    <div style={{fontSize:"28px",fontWeight:"900",color:daysLeft<180?"var(--amber)":"var(--accent)",lineHeight:1}}>{daysLeft}</div>
-                    <div style={{fontSize:"8px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",textTransform:"uppercase"}}>Days Left</div>
-                  </div>}
+                <div style={{textAlign:"center",flexShrink:0}}>
+                  <Arc value={totalProgress} size={72}/>
+                  <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",marginTop:"3px",textTransform:"uppercase"}}>Overall</div>
+                </div>
+              </div>
+              {/* Badge row */}
+              <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"14px"}}>
+                {site.blocks&&<Badge label={`${site.blocks} Blocks`} color={SCC["in-progress"]}/>}
+                {site.units&&<Badge label={`${Number(site.units).toLocaleString()} Units`} color={SCC["completed"]}/>}
+                {site.contractValue&&<Badge label={fmtKES(site.contractValue)} color={SCC["at-risk"]}/>}
+                {site.targetCompletion&&<Badge label={`Due ${site.targetCompletion}`} color={SCC["critical"]}/>}
+              </div>
+              {/* Bottom KPIs row */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"0",borderTop:"1px solid var(--border)",paddingTop:"12px"}}>
+                <div style={{textAlign:"center",padding:"0 8px"}}>
+                  <div style={{fontSize:"22px",fontWeight:"900",color:"var(--accent)",lineHeight:1}}>{phases.filter(p=>p.status==="in-progress").length}</div>
+                  <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",marginTop:"3px"}}>PHASES ACTIVE</div>
+                </div>
+                <div style={{textAlign:"center",padding:"0 8px",borderLeft:"1px solid var(--border)",borderRight:"1px solid var(--border)"}}>
+                  <div style={{fontSize:"22px",fontWeight:"900",color:daysLeft!=null&&daysLeft<180?"var(--amber)":"var(--accent)",lineHeight:1}}>{daysLeft??"—"}</div>
+                  <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",marginTop:"3px"}}>DAYS LEFT</div>
+                </div>
+                <div style={{textAlign:"center",padding:"0 8px"}}>
+                  <div style={{fontSize:"22px",fontWeight:"900",color:openRisks>0?"var(--red)":"var(--green)",lineHeight:1}}>{openRisks}</div>
+                  <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",marginTop:"3px"}}>OPEN RISKS</div>
                 </div>
               </div>
             </div>
-            <div className="page-grid-5" style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"10px",marginBottom:"14px"}}>
-              <StatCard label="Phases Active" value={`${phases.filter(p=>p.status==="in-progress").length}/${phases.length}`} color="var(--accent)" sub="concurrent"/>
-              <StatCard label="Units Delivered" value={completedUnits.toLocaleString()} color="var(--green)" sub={`of ${Number(site.units||0).toLocaleString()}`} bar={pct(completedUnits,site.units||1)}/>
-              <StatCard label="Total Spent" value={fmtKES(totalSpent)} color="var(--amber)" sub={`of ${fmtKES(totalBudget)}`} bar={pct(totalSpent,totalBudget||1)}/>
-              <StatCard label="Open Risks" value={openRisks} color={openRisks>0?"var(--red)":"var(--green)"} sub="require action"/>
-              <StatCard label="Mat. Alerts" value={matAlerts} color={matAlerts>0?"var(--red)":"var(--green)"} sub="low stock items"/>
+
+            {/* ══ STAT CARDS — horizontal swipe on mobile ══ */}
+            {/* Desktop: grid */}
+            <div className="desk-only">
+              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"10px",marginBottom:"14px"}}>
+                <StatCard label="Phases Active" value={`${phases.filter(p=>p.status==="in-progress").length}/${phases.length}`} color="var(--accent)" sub="concurrent"/>
+                <StatCard label="Units Delivered" value={completedUnits.toLocaleString()} color="var(--green)" sub={`of ${Number(site.units||0).toLocaleString()}`} bar={pct(completedUnits,site.units||1)}/>
+                <StatCard label="Total Spent" value={fmtKES(totalSpent)} color="var(--amber)" sub={`of ${fmtKES(totalBudget)}`} bar={pct(totalSpent,totalBudget||1)}/>
+                <StatCard label="Open Risks" value={openRisks} color={openRisks>0?"var(--red)":"var(--green)"} sub="require action"/>
+                <StatCard label="Mat. Alerts" value={matAlerts} color={matAlerts>0?"var(--red)":"var(--green)"} sub="low stock items"/>
+              </div>
             </div>
-            {/* ── Provisions summary strip ── */}
+            {/* Mobile: swipe tray */}
+            <div className="mob-only" style={{marginBottom:"14px"}}>
+              <div className="mob-scroll-x">
+                {[
+                  {label:"Units Delivered",value:completedUnits.toLocaleString(),color:"var(--green)",sub:`of ${Number(site.units||0).toLocaleString()}`,bar:pct(completedUnits,site.units||1)},
+                  {label:"Total Spent",value:fmtKES(totalSpent),color:"var(--amber)",sub:`of ${fmtKES(totalBudget)}`,bar:pct(totalSpent,totalBudget||1)},
+                  {label:"Mat. Alerts",value:matAlerts,color:matAlerts>0?"var(--red)":"var(--green)",sub:"low stock"},
+                  {label:"Blocked Tasks",value:blockedWPs,color:blockedWPs>0?"var(--red)":"var(--green)",sub:"work pkgs"},
+                ].map(s=>(
+                  <div key={s.label} className="mob-stat-card">
+                    <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.09em"}}>{s.label}</div>
+                    <div style={{fontSize:"28px",fontWeight:"900",color:s.color,lineHeight:1,marginTop:"4px"}}>{s.value}</div>
+                    <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",marginTop:"3px"}}>{s.sub}</div>
+                    {s.bar!==undefined&&<Bar value={s.bar} color={s.color} h={3}/>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ══ PROVISIONS STRIP ══ */}
             {(()=>{
               const voApp=(provisions.variations||[]).filter(v=>v.status==="approved").reduce((s,v)=>s+v.amount,0);
               const voPend=(provisions.variations||[]).filter(v=>v.status==="pending"||v.status==="submitted").reduce((s,v)=>s+v.amount,0);
               const contRem=(provisions.contingency?.allocated||0)-(provisions.contingency?.expended||0);
               const psRemaining=(provisions.provisionalSums||[]).filter(p=>p.status==="pending").reduce((s,p)=>s+p.scheduled,0);
+              const chips=[
+                {l:"Revised Contract",v:fmtKES((site.contractValue||0)+voApp),c:"var(--accent)"},
+                {l:"Approved VOs",v:`+${fmtKES(voApp)}`,c:"var(--green)"},
+                {l:"Pending VOs",v:`+${fmtKES(voPend)}`,c:voPend>0?"var(--amber)":"var(--text4)"},
+                {l:"Contingency Left",v:fmtKES(contRem),c:contRem<5000000?"var(--red)":"var(--green)"},
+                {l:"PS Uninstructed",v:fmtKES(psRemaining),c:"var(--text3)"},
+              ];
               return(
-                <div className="card" style={{padding:"12px 16px",marginBottom:"14px",cursor:"pointer",display:"flex",gap:"0",alignItems:"stretch",overflow:"hidden",position:"relative"}} onClick={()=>setView("provisions")}>
-                  <div style={{position:"absolute",top:0,left:0,right:0,height:"2px",background:"linear-gradient(90deg,var(--green),var(--amber),var(--accent))"}}/>
-                  <div style={{fontSize:"9px",fontFamily:"'Share Tech Mono',monospace",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.1em",marginRight:"18px",alignSelf:"center",flexShrink:0}}>💰 Provisions</div>
-                  {[
-                    {l:"Revised Contract",v:fmtKES((site.contractValue||0)+voApp),c:"var(--accent)"},
-                    {l:"Approved VOs",v:`+${fmtKES(voApp)}`,c:"var(--green)"},
-                    {l:"Pending VOs",v:`+${fmtKES(voPend)}`,c:voPend>0?"var(--amber)":"var(--text4)"},
-                    {l:"Contingency Left",v:fmtKES(contRem),c:contRem<5000000?"var(--red)":"var(--green)"},
-                    {l:"PS Uninstructed",v:fmtKES(psRemaining),c:"var(--text3)"},
-                  ].map(({l,v,c})=>(
-                    <div key={l} style={{flex:1,textAlign:"center",padding:"4px 8px",borderLeft:"1px solid var(--border)"}}>
-                      <div style={{fontSize:"13px",fontWeight:"900",color:c,lineHeight:1}}>{v}</div>
-                      <div style={{fontSize:"8px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",marginTop:"3px",textTransform:"uppercase"}}>{l}</div>
+                <>
+                  {/* Desktop horizontal strip */}
+                  <div className="card desk-only" style={{padding:"12px 16px",marginBottom:"14px",cursor:"pointer",display:"flex",gap:"0",alignItems:"stretch",overflow:"hidden",position:"relative"}} onClick={()=>setView("provisions")}>
+                    <div style={{position:"absolute",top:0,left:0,right:0,height:"2px",background:"linear-gradient(90deg,var(--green),var(--amber),var(--accent))"}}/>
+                    <div style={{fontSize:"9px",fontFamily:"'Share Tech Mono',monospace",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.1em",marginRight:"18px",alignSelf:"center",flexShrink:0}}>💰 Provisions</div>
+                    {chips.map(({l,v,c})=>(
+                      <div key={l} style={{flex:1,textAlign:"center",padding:"4px 8px",borderLeft:"1px solid var(--border)"}}>
+                        <div style={{fontSize:"13px",fontWeight:"900",color:c,lineHeight:1}}>{v}</div>
+                        <div style={{fontSize:"8px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",marginTop:"3px",textTransform:"uppercase"}}>{l}</div>
+                      </div>
+                    ))}
+                    <div style={{fontSize:"9px",color:"var(--accent)",fontFamily:"'Share Tech Mono',monospace",alignSelf:"center",marginLeft:"12px",flexShrink:0}}>→ View All</div>
+                  </div>
+                  {/* Mobile 2×3 grid */}
+                  <div className="mob-only" style={{marginBottom:"14px",cursor:"pointer"}} onClick={()=>setView("provisions")}>
+                    <div className="mob-section-hdr">
+                      <span className="mob-section-label">💰 Provisions</span>
+                      <button className="mob-section-action" onClick={()=>setView("provisions")}>View All →</button>
                     </div>
-                  ))}
-                  <div style={{fontSize:"9px",color:"var(--accent)",fontFamily:"'Share Tech Mono',monospace",alignSelf:"center",marginLeft:"12px",flexShrink:0}}>→ View All</div>
-                </div>
+                    <div className="mob-provision-grid">
+                      {chips.map(({l,v,c})=>(
+                        <div key={l} className="mob-provision-chip">
+                          <div style={{fontSize:"16px",fontWeight:"900",color:c,lineHeight:1}}>{v}</div>
+                          <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",marginTop:"4px",textTransform:"uppercase"}}>{l}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
               );
             })()}
-            <div className="page-grid-2" style={{display:"grid",gridTemplateColumns:"1fr 320px",gap:"14px"}}>
-              <div>
-                <SectionTitle>Construction Phases</SectionTitle>
-                <div className="page-grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
-                  {phases.map(ph=>(
-                    <div key={ph.id} className="card" style={{padding:"12px",cursor:"pointer",position:"relative",overflow:"hidden"}} onClick={()=>setView("programme")}>
-                      <div style={{position:"absolute",top:0,left:0,bottom:0,width:"3px",background:SCC[ph.status]||"#A0AEC0",borderRadius:"8px 0 0 8px"}}/>
-                      <div style={{paddingLeft:"8px"}}>
-                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:"5px"}}>
-                          <div><div style={{fontSize:"8px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>{ph.id}</div><div style={{fontSize:"11px",fontWeight:"700",color:"var(--text)",lineHeight:1.3}}>{ph.name}</div></div>
-                          <span style={{fontSize:"15px",fontWeight:"900",color:SCC[ph.status]||"#A0AEC0"}}>{ph.progress}%</span>
+
+            {/* ══ PHASES + SNAGS + RISKS ══ */}
+            {/* Desktop layout */}
+            <div className="desk-only">
+              <div style={{display:"grid",gridTemplateColumns:"1fr 320px",gap:"14px"}}>
+                <div>
+                  <SectionTitle>Construction Phases</SectionTitle>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
+                    {phases.map(ph=>(
+                      <div key={ph.id} className="card" style={{padding:"12px",cursor:"pointer",position:"relative",overflow:"hidden"}} onClick={()=>setView("programme")}>
+                        <div style={{position:"absolute",top:0,left:0,bottom:0,width:"3px",background:SCC[ph.status]||"#A0AEC0"}}/>
+                        <div style={{paddingLeft:"8px"}}>
+                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:"5px"}}>
+                            <div><div style={{fontSize:"8px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>{ph.id}</div><div style={{fontSize:"11px",fontWeight:"700",color:"var(--text)",lineHeight:1.3}}>{ph.name}</div></div>
+                            <span style={{fontSize:"15px",fontWeight:"900",color:SCC[ph.status]||"#A0AEC0"}}>{ph.progress}%</span>
+                          </div>
+                          <Bar value={ph.progress} color={SCC[ph.status]||"#A0AEC0"} h={3}/>
+                          <div style={{display:"flex",justifyContent:"space-between",marginTop:"6px"}}>
+                            <Badge label={ph.status} color={SCC[ph.status]||"#A0AEC0"}/>
+                            <span style={{fontSize:"8px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>{fmtKES(ph.spent)} / {fmtKES(ph.budget)}</span>
+                          </div>
                         </div>
-                        <Bar value={ph.progress} color={SCC[ph.status]||"#A0AEC0"} h={3}/>
-                        <div style={{display:"flex",justifyContent:"space-between",marginTop:"6px"}}>
-                          <Badge label={ph.status} color={SCC[ph.status]||"#A0AEC0"}/>
-                          <span style={{fontSize:"8px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>{fmtKES(ph.spent)} / {fmtKES(ph.budget)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+                  <div className="card" style={{padding:"14px"}}>
+                    <SectionTitle>QA — Open Snags</SectionTitle>
+                    {snags.filter(s=>s.status==="open").map(s=>(
+                      <div key={s.id} style={{padding:"6px 0",borderBottom:"1px solid var(--border)",display:"flex",gap:"8px"}}>
+                        <div style={{width:"3px",background:SCC[s.severity]||"#A0AEC0",borderRadius:"2px",alignSelf:"stretch",flexShrink:0}}/>
+                        <div style={{flex:1}}><div style={{fontSize:"10px",color:"var(--text)",fontWeight:"600"}}>{s.item}</div><div style={{fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>{s.block} · {s.raised}</div></div>
+                        <Badge label={s.severity} color={SCC[s.severity]||"#A0AEC0"}/>
+                      </div>
+                    ))}
+                    {snags.filter(s=>s.status==="open").length===0&&<div style={{fontSize:"10px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>No open snags ✓</div>}
+                  </div>
+                  <div className="card alert-card" style={{padding:"14px"}}>
+                    <SectionTitle>⚠ Critical Risks</SectionTitle>
+                    {risks.filter(r=>r.severity==="critical"||r.probability>=80).map(r=>(
+                      <div key={r.id} style={{padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:"2px"}}>
+                          <span style={{fontSize:"10px",color:"var(--text)",fontWeight:"600"}}>{r.title}</span>
+                          <span style={{fontSize:"11px",fontWeight:"900",color:SCC[r.severity]||"#A0AEC0"}}>{r.probability}%</span>
                         </div>
+                        <Bar value={r.probability} color={SCC[r.severity]||"#A0AEC0"} h={2}/>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
-                <div className="card" style={{padding:"14px"}}>
-                  <SectionTitle>QA — Open Snags</SectionTitle>
-                  {snags.filter(s=>s.status==="open").map(s=>(
-                    <div key={s.id} style={{padding:"6px 0",borderBottom:"1px solid var(--border)",display:"flex",gap:"8px"}}>
-                      <div style={{width:"3px",background:SCC[s.severity]||"#A0AEC0",borderRadius:"2px",alignSelf:"stretch",flexShrink:0}}/>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:"10px",color:"var(--text)",fontWeight:"600"}}>{s.item}</div>
-                        <div style={{fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>{s.block} · {s.raised}</div>
-                      </div>
-                      <Badge label={s.severity} color={SCC[s.severity]||"#A0AEC0"}/>
-                    </div>
-                  ))}
-                  {snags.filter(s=>s.status==="open").length===0&&<div style={{fontSize:"10px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>No open snags</div>}
-                </div>
-                <div className="card alert-card" style={{padding:"14px"}}>
-                  <SectionTitle>⚠ Critical Risks</SectionTitle>
-                  {risks.filter(r=>r.severity==="critical"||r.probability>=80).map(r=>(
-                    <div key={r.id} style={{padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
-                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:"2px"}}>
-                        <span style={{fontSize:"10px",color:"var(--text)",fontWeight:"600"}}>{r.title}</span>
-                        <span style={{fontSize:"11px",fontWeight:"900",color:SCC[r.severity]||"#A0AEC0"}}>{r.probability}%</span>
-                      </div>
-                      <Bar value={r.probability} color={SCC[r.severity]||"#A0AEC0"} h={2}/>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
+
+            {/* Mobile: phases swipe tray */}
+            <div className="mob-only">
+              {/* Phases */}
+              <div className="mob-section-hdr">
+                <span className="mob-section-label">🏗 Phases</span>
+                <button className="mob-section-action" onClick={()=>setView("programme")}>Programme →</button>
+              </div>
+              <div className="mob-scroll-x" style={{marginBottom:"16px"}}>
+                {phases.map(ph=>(
+                  <div key={ph.id} className="mob-phase-card" onClick={()=>setView("programme")}>
+                    <div style={{position:"absolute",top:0,left:0,right:0,height:"3px",background:SCC[ph.status]||"#A0AEC0",borderRadius:"18px 18px 0 0"}}/>
+                    <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:SCC[ph.status]||"#A0AEC0",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"6px",marginTop:"4px"}}>{ph.id}</div>
+                    <div style={{fontSize:"13px",fontWeight:"800",color:"var(--text)",lineHeight:1.3,marginBottom:"10px"}}>{ph.name}</div>
+                    <div style={{fontSize:"28px",fontWeight:"900",color:SCC[ph.status]||"#A0AEC0",lineHeight:1,marginBottom:"8px"}}>{ph.progress}%</div>
+                    <Bar value={ph.progress} color={SCC[ph.status]||"#A0AEC0"} h={4}/>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:"8px"}}>
+                      <Badge label={ph.status} color={SCC[ph.status]||"#A0AEC0"}/>
+                      <span style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)"}}>{fmtKES(ph.budget)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Open Snags — list */}
+              <div className="mob-section-hdr">
+                <span className="mob-section-label">🔍 Open Snags</span>
+                <button className="mob-section-action" onClick={()=>setView("risks")}>View All →</button>
+              </div>
+              <div style={{marginBottom:"16px",borderRadius:"18px",overflow:"hidden",border:"1px solid var(--border)"}}>
+                {snags.filter(s=>s.status==="open").slice(0,5).map((s,i,arr)=>(
+                  <div key={s.id} className="mob-list-row" style={{borderBottom:i<arr.length-1?"1px solid var(--border)":"none",borderRadius:i===0?"18px 18px 0 0":i===arr.length-1?"0 0 18px 18px":"0"}}>
+                    <div style={{width:"10px",height:"10px",borderRadius:"50%",background:SCC[s.severity]||"#A0AEC0",flexShrink:0}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:"13px",fontWeight:"700",color:"var(--text)",lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.item}</div>
+                      <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",marginTop:"2px"}}>{s.block} · {s.raised}</div>
+                    </div>
+                    <Badge label={s.severity} color={SCC[s.severity]||"#A0AEC0"}/>
+                  </div>
+                ))}
+                {snags.filter(s=>s.status==="open").length===0&&(
+                  <div style={{padding:"20px",textAlign:"center",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",color:"var(--green)"}}>✓ No open snags</div>
+                )}
+              </div>
+
+              {/* Critical Risks — list */}
+              {risks.filter(r=>r.severity==="critical"||r.probability>=80).length>0&&(
+                <>
+                  <div className="mob-section-hdr">
+                    <span className="mob-section-label" style={{color:"var(--red)"}}>⚠ Critical Risks</span>
+                    <button className="mob-section-action" onClick={()=>setView("risks")}>View All →</button>
+                  </div>
+                  <div style={{marginBottom:"16px",borderRadius:"18px",overflow:"hidden",border:"1px solid var(--red)33",background:"var(--red)04"}}>
+                    {risks.filter(r=>r.severity==="critical"||r.probability>=80).slice(0,4).map((r,i,arr)=>(
+                      <div key={r.id} className="mob-risk-row" style={{borderBottom:i<arr.length-1?"1px solid var(--border)":"none",borderRadius:i===0?"18px 18px 0 0":i===arr.length-1?"0 0 18px 18px":"0"}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:"13px",fontWeight:"700",color:"var(--text)",lineHeight:1.3}}>{r.title}</div>
+                          <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",marginTop:"3px"}}>Phase {r.phase}</div>
+                          <div style={{marginTop:"6px"}}><Bar value={r.probability} color={SCC[r.severity]||"#A0AEC0"} h={3}/></div>
+                        </div>
+                        <div style={{textAlign:"center",flexShrink:0,marginLeft:"12px"}}>
+                          <div style={{fontSize:"24px",fontWeight:"900",color:SCC[r.severity]||"#A0AEC0",lineHeight:1}}>{r.probability}%</div>
+                          <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"7px",color:"var(--text4)"}}>PROB.</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
           </div>
         )}
 
         {/* ── PROGRAMME ── */}
         {view==="programme"&&(
           <div style={{animation:"fadeUp 0.2s ease"}}>
-            <div className="card" style={{padding:"18px",marginBottom:"14px"}}>
+            {/* Mobile programme header */}
+            <div className="mob-hero card mob-only" style={{marginBottom:"14px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}>
+                <div>
+                  <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",textTransform:"uppercase",marginBottom:"4px"}}>Master Programme</div>
+                  <div style={{fontSize:"16px",fontWeight:"900",color:"var(--text)"}}>{site.name}</div>
+                  <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text3)",marginTop:"4px"}}>{site.startDate} → {site.targetCompletion}</div>
+                </div>
+                <Arc value={totalProgress} size={64}/>
+              </div>
+              {daysLeft!==null&&(
+                <div style={{background:"var(--accent)12",border:"1px solid var(--accent)30",borderRadius:"12px",padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text3)"}}>Days Remaining</span>
+                  <span style={{fontSize:"22px",fontWeight:"900",color:daysLeft<180?"var(--amber)":"var(--accent)"}}>{daysLeft}</span>
+                </div>
+              )}
+            </div>
+            {/* Desktop programme header */}
+            <div className="card desk-only" style={{padding:"18px",marginBottom:"14px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px",flexWrap:"wrap",gap:"10px"}}>
                 <div>
                   <div style={{fontSize:"15px",fontWeight:"800",color:"var(--text)"}}>Master Programme — {site.name}</div>
@@ -7761,6 +8853,39 @@ function App(){
               </div>
               <Gantt phases={phases}/>
             </div>
+            {/* Mobile: phases as list cards */}
+            <div className="mob-only" style={{marginBottom:"14px"}}>
+              <div className="mob-section-hdr"><span className="mob-section-label">🏗 Phase Progress</span></div>
+              <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+                {phases.map(ph=>(
+                  <div key={ph.id} className="card" style={{padding:"16px",position:"relative",overflow:"hidden"}}>
+                    <div style={{position:"absolute",top:0,left:0,bottom:0,width:"4px",background:SCC[ph.status]||"#A0AEC0"}}/>
+                    <div style={{paddingLeft:"12px"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>
+                        <div>
+                          <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)"}}>{ph.id}</div>
+                          <div style={{fontSize:"15px",fontWeight:"800",color:"var(--text)",lineHeight:1.3}}>{ph.name}</div>
+                        </div>
+                        <div style={{textAlign:"right"}}>
+                          <div style={{fontSize:"28px",fontWeight:"900",color:SCC[ph.status]||"#A0AEC0",lineHeight:1}}>{ph.progress}%</div>
+                          <Badge label={ph.status} color={SCC[ph.status]||"#A0AEC0"}/>
+                        </div>
+                      </div>
+                      <Bar value={ph.progress} color={SCC[ph.status]||"#A0AEC0"} h={6}/>
+                      <div style={{display:"flex",justifyContent:"space-between",marginTop:"10px"}}>
+                        <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)"}}>
+                          Budget: <strong style={{color:"var(--text)"}}>{fmtKES(ph.budget)}</strong>
+                        </div>
+                        <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:ph.spent>ph.budget?"var(--red)":"var(--text4)"}}>
+                          Spent: <strong style={{color:ph.spent>ph.budget?"var(--red)":"var(--text)"}}>{fmtKES(ph.spent)}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Phase budget table */}
             <div className="card">
               <div style={{padding:"10px 14px",borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"6px"}}>
                 <SectionTitle>Phase Budget Tracker</SectionTitle>
@@ -7770,7 +8895,7 @@ function App(){
                   <Badge label={`${pct(totalSpent,totalBudget||1)}% utilised`} color={pct(totalSpent,totalBudget||1)>95?SCC["critical"]:SCC["completed"]}/>
                 </div>
               </div>
-              <div style={{overflowX:"auto"}}>
+              <div className="tbl-wrap" style={{overflowX:"auto"}}>
                 <table>
                   <thead><tr><th>Phase</th><th>Description</th><th className="hide-mobile">Status</th><th className="hide-mobile">Lead</th><th>Budget</th><th>Spent</th><th>Variance</th><th>Progress</th></tr></thead>
                   <tbody>
@@ -7925,48 +9050,74 @@ function App(){
         {/* ── RISKS ── */}
         {view==="risks"&&(
           <div style={{animation:"fadeUp 0.2s ease"}}>
-            <div className="card" style={{padding:"18px",marginBottom:"14px"}}>
-              <SectionTitle>Risk Register — {site.name}</SectionTitle>
+            {/* Mobile header */}
+            <div className="mob-only mob-hero card" style={{marginBottom:"14px"}}>
+              <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:"6px"}}>⚠ Risk Register</div>
+              <div style={{fontSize:"18px",fontWeight:"900",color:"var(--text)",marginBottom:"12px"}}>{site.name}</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"0",borderTop:"1px solid var(--border)",paddingTop:"12px"}}>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontSize:"22px",fontWeight:"900",color:"var(--red)",lineHeight:1}}>{risks.filter(r=>r.severity==="critical").length}</div>
+                  <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"7px",color:"var(--text4)",marginTop:"3px"}}>CRITICAL</div>
+                </div>
+                <div style={{textAlign:"center",borderLeft:"1px solid var(--border)",borderRight:"1px solid var(--border)"}}>
+                  <div style={{fontSize:"22px",fontWeight:"900",color:"var(--amber)",lineHeight:1}}>{risks.filter(r=>r.status==="open").length}</div>
+                  <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"7px",color:"var(--text4)",marginTop:"3px"}}>OPEN</div>
+                </div>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontSize:"22px",fontWeight:"900",color:"var(--green)",lineHeight:1}}>{snags.filter(s=>s.status==="open").length}</div>
+                  <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"7px",color:"var(--text4)",marginTop:"3px"}}>SNAGS</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Risk list — native cards on mobile */}
+            <div className="mob-section-hdr mob-only"><span className="mob-section-label">🚨 Risk Register</span></div>
+            <div style={{display:"flex",flexDirection:"column",gap:"10px",marginBottom:"16px"}}>
               {risks.map(r=>(
-                <div key={r.id} className={r.severity==="critical"&&r.status==="open"?"alert-card card":"card"} style={{margin:"0 0 10px",border:`1px solid ${SCC[r.severity]||"#A0AEC0"}25`,borderRadius:"5px",padding:"12px",background:"var(--bg)"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"12px"}}>
+                <div key={r.id} className="card" style={{padding:"16px",border:`1px solid ${SCC[r.severity]||"#A0AEC0"}30`,position:"relative",overflow:"hidden"}}>
+                  <div style={{position:"absolute",top:0,left:0,right:0,height:"3px",background:SCC[r.severity]||"#A0AEC0"}}/>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"12px",marginBottom:"10px"}}>
                     <div style={{flex:1}}>
-                      <div style={{display:"flex",gap:"6px",marginBottom:"4px",flexWrap:"wrap"}}>
-                        <span style={{fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>{r.id}</span>
+                      <div style={{display:"flex",gap:"5px",flexWrap:"wrap",marginBottom:"6px"}}>
+                        <span style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)"}}>{r.id}</span>
                         <Badge label={r.severity} color={SCC[r.severity]||"#A0AEC0"}/>
                         <Badge label={r.status} color={SCC[r.status]||"#A0AEC0"}/>
-                        <Badge label={`Phase: ${r.phase}`} color={SCC["in-progress"]}/>
                       </div>
-                      <div style={{fontSize:"13px",fontWeight:"800",color:"var(--text)",marginBottom:"2px"}}>{r.title}</div>
-                      <div style={{fontSize:"10px",color:"var(--text3)",fontFamily:"'Share Tech Mono',monospace"}}>Impact: {r.impact}</div>
+                      <div style={{fontSize:"14px",fontWeight:"800",color:"var(--text)",lineHeight:1.3,marginBottom:"4px"}}>{r.title}</div>
+                      <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text3)"}}>Phase {r.phase} · {r.impact}</div>
                     </div>
-                    <div style={{textAlign:"right",flexShrink:0}}>
-                      <div style={{fontSize:"24px",fontWeight:"900",color:SCC[r.severity]||"#A0AEC0",lineHeight:1}}>{r.probability}%</div>
-                      <div style={{fontSize:"8px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>PROBABILITY</div>
+                    <div style={{textAlign:"center",flexShrink:0}}>
+                      <div style={{fontSize:"30px",fontWeight:"900",color:SCC[r.severity]||"#A0AEC0",lineHeight:1}}>{r.probability}%</div>
+                      <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"7px",color:"var(--text4)"}}>PROB.</div>
                     </div>
                   </div>
-                  <Bar value={r.probability} color={SCC[r.severity]||"#A0AEC0"} h={3}/>
-                  <div style={{marginTop:"8px",display:"flex",gap:"6px"}}>
-                    <div style={{width:"3px",background:SCC[r.status]||"#A0AEC0",borderRadius:"2px",flexShrink:0}}/>
-                    <div style={{fontSize:"11px",color:"var(--text2)"}}><strong style={{color:"var(--text4)",fontSize:"9px",fontFamily:"'Share Tech Mono',monospace"}}>Mitigation: </strong>{r.mitigation}</div>
+                  <Bar value={r.probability} color={SCC[r.severity]||"#A0AEC0"} h={4}/>
+                  <div style={{marginTop:"10px",padding:"10px 12px",background:"var(--bg)",borderRadius:"10px",display:"flex",gap:"8px",alignItems:"flex-start"}}>
+                    <div style={{width:"3px",background:SCC[r.status]||"#A0AEC0",borderRadius:"2px",flexShrink:0,alignSelf:"stretch",marginTop:"1px"}}/>
+                    <div style={{fontSize:"11px",color:"var(--text2)",lineHeight:1.5}}>
+                      <span style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",display:"block",marginBottom:"2px"}}>MITIGATION</span>
+                      {r.mitigation}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
-            <div className="card" style={{padding:"18px"}}>
-              <SectionTitle>QA/QC Snagging Register</SectionTitle>
+
+            {/* Snags */}
+            <div className="mob-section-hdr mob-only"><span className="mob-section-label">🔍 QA/QC Snagging</span></div>
+            <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
               {snags.map(s=>(
-                <div key={s.id} style={{border:`1px solid ${SCC[s.status==="remediated"?"remediated":s.severity]||"#A0AEC0"}30`,borderRadius:"5px",padding:"10px",marginBottom:"8px",background:"var(--bg)"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"3px"}}>
-                    <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
-                      <span style={{fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>{s.id}</span>
-                      <Badge label={s.severity} color={SCC[s.status==="remediated"?"remediated":s.severity]||"#A0AEC0"}/>
-                      <Badge label={s.status} color={SCC[s.status]||"#A0AEC0"}/>
+                <div key={s.id} className="card" style={{padding:"14px",border:`1px solid ${SCC[s.status==="remediated"?"remediated":s.severity]||"#A0AEC0"}30`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"10px"}}>
+                    <div style={{flex:1}}>
+                      <div style={{display:"flex",gap:"5px",flexWrap:"wrap",marginBottom:"5px"}}>
+                        <Badge label={s.severity} color={SCC[s.status==="remediated"?"remediated":s.severity]||"#A0AEC0"}/>
+                        <Badge label={s.status} color={SCC[s.status]||"#A0AEC0"}/>
+                      </div>
+                      <div style={{fontSize:"13px",fontWeight:"700",color:"var(--text)",lineHeight:1.3}}>{s.item}</div>
+                      <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",marginTop:"3px"}}>{s.block} · {s.raised}</div>
                     </div>
-                    <span style={{fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>{s.raised}</span>
                   </div>
-                  <div style={{fontSize:"12px",fontWeight:"700",color:"var(--text)"}}>{s.item}</div>
-                  <div style={{fontSize:"9px",color:"var(--text3)",fontFamily:"'Share Tech Mono',monospace"}}>{s.block}</div>
                 </div>
               ))}
             </div>
@@ -7976,36 +9127,65 @@ function App(){
         {/* ── TEAM ── */}
         {view==="team"&&(
           <div style={{animation:"fadeUp 0.2s ease"}}>
-            <div className="page-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:"14px"}}>
+            {/* Mobile team header */}
+            <div className="mob-only mob-hero card" style={{marginBottom:"14px"}}>
+              <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:"6px"}}>👷 Site Team</div>
+              <div style={{fontSize:"18px",fontWeight:"900",color:"var(--text)",marginBottom:"12px"}}>{site.name}</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"0",borderTop:"1px solid var(--border)",paddingTop:"12px"}}>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontSize:"22px",fontWeight:"900",color:"var(--accent)",lineHeight:1}}>{team.length}</div>
+                  <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"7px",color:"var(--text4)",marginTop:"3px"}}>MEMBERS</div>
+                </div>
+                <div style={{textAlign:"center",borderLeft:"1px solid var(--border)",borderRight:"1px solid var(--border)"}}>
+                  <div style={{fontSize:"22px",fontWeight:"900",color:"var(--amber)",lineHeight:1}}>{team.filter(m=>m.load>80).length}</div>
+                  <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"7px",color:"var(--text4)",marginTop:"3px"}}>OVERLOADED</div>
+                </div>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontSize:"22px",fontWeight:"900",color:"var(--green)",lineHeight:1}}>{wps.filter(w=>w.status!=="done").length}</div>
+                  <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"7px",color:"var(--text4)",marginTop:"3px"}}>ACTIVE WPS</div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
               {team.map(m=>{
                 const assignments=wps.filter(w=>w.assignee===m.id&&w.status!=="done");
                 const lc=m.load>90?"var(--red)":m.load>80?"var(--amber)":"var(--green)";
                 return(
-                  <div key={m.id} className="card" style={{padding:"16px"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"12px"}}>
-                      <div style={{display:"flex",gap:"10px",alignItems:"center"}}>
-                        <div style={{width:"44px",height:"44px",borderRadius:"8px",background:`${lc}15`,border:`2px solid ${lc}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"13px",fontWeight:"900",color:lc,fontFamily:"'Share Tech Mono',monospace"}}>{m.id}</div>
-                        <div>
-                          <div style={{fontSize:"14px",fontWeight:"800",color:"var(--text)"}}>{m.name}</div>
-                          <div style={{fontSize:"10px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",textTransform:"uppercase"}}>{m.role}</div>
-                          <Badge label={m.org} color={SCC["in-progress"]}/>
-                        </div>
+                  <div key={m.id} className="mob-member-card">
+                    {/* Member header row */}
+                    <div style={{display:"flex",alignItems:"center",gap:"14px",marginBottom:"12px"}}>
+                      <div style={{width:"52px",height:"52px",borderRadius:"14px",background:`${lc}15`,border:`2px solid ${lc}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"15px",fontWeight:"900",color:lc,fontFamily:"'Share Tech Mono',monospace",flexShrink:0}}>{m.id}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:"16px",fontWeight:"800",color:"var(--text)",lineHeight:1.2}}>{m.name}</div>
+                        <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)",textTransform:"uppercase",marginTop:"2px"}}>{m.role}</div>
+                        <Badge label={m.org} color={SCC["in-progress"]}/>
                       </div>
-                      <div style={{textAlign:"right"}}>
-                        <div style={{fontSize:"24px",fontWeight:"900",color:lc,lineHeight:1}}>{m.load}%</div>
-                        <div style={{fontSize:"8px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>UTILISATION</div>
+                      <div style={{textAlign:"right",flexShrink:0}}>
+                        <div style={{fontSize:"30px",fontWeight:"900",color:lc,lineHeight:1}}>{m.load}%</div>
+                        <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"7px",color:"var(--text4)"}}>LOAD</div>
                       </div>
                     </div>
-                    <Bar value={m.load} color={lc} h={5}/>
-                    {assignments.length>0&&<div style={{marginTop:"10px"}}>
-                      <div style={{fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",textTransform:"uppercase",marginBottom:"5px"}}>Active Packages ({assignments.length})</div>
-                      {assignments.map(w=>(
-                        <div key={w.id} style={{display:"flex",gap:"6px",alignItems:"center",marginBottom:"4px",padding:"5px 7px",background:"var(--bg)",borderRadius:"3px",borderLeft:`2px solid ${SCC[w.status]||"#A0AEC0"}`}}>
-                          <div style={{flex:1}}><div style={{fontSize:"10px",color:"var(--text)"}}>{w.name}</div><div style={{fontSize:"9px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace"}}>{w.phase} · {w.trade}</div></div>
-                          <Badge label={w.status} color={SCC[w.status]||"#A0AEC0"}/>
+                    <Bar value={m.load} color={lc} h={6}/>
+                    {/* Active assignments */}
+                    {assignments.length>0&&(
+                      <div style={{marginTop:"12px"}}>
+                        <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.09em",marginBottom:"8px"}}>
+                          Active Packages · {assignments.length}
                         </div>
-                      ))}
-                    </div>}
+                        <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
+                          {assignments.map(w=>(
+                            <div key={w.id} style={{display:"flex",gap:"10px",alignItems:"center",padding:"10px 12px",background:"var(--bg)",borderRadius:"12px",borderLeft:`3px solid ${SCC[w.status]||"#A0AEC0"}`}}>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:"12px",fontWeight:"700",color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{w.name}</div>
+                                <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"8px",color:"var(--text4)",marginTop:"2px"}}>{w.phase} · {w.trade}</div>
+                              </div>
+                              <Badge label={w.status} color={SCC[w.status]||"#A0AEC0"}/>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -8031,15 +9211,29 @@ function App(){
 
       </main>
 
-      {/* MOBILE BOTTOM NAV — iPhone 17 floating glass pill */}
+      {/* MOBILE BOTTOM NAV — iPhone 17 floating glass pill, 5 pinned + More */}
       <nav className="mobile-nav">
         <div className="mobile-nav-inner">
-          {NAV.map(({id,label,icon})=>(
+          {NAV.slice(0,5).map(({id,label,icon})=>(
             <button key={id} className={`mob-nav-btn ${view===id?"active":""}`} onClick={()=>setView(id)}>
               <span className="mob-nav-icon">{icon}</span>
               <span className="mob-nav-label">{label}</span>
             </button>
           ))}
+          {/* More — opens drawer with remaining screens */}
+          <button className={`mob-nav-btn ${NAV.slice(5).some(n=>n.id===view)?"active":""}`}
+            onClick={()=>setShowMobileMenu(true)}>
+            <span className="mob-nav-icon" style={{fontSize:"18px"}}>
+              {NAV.slice(5).some(n=>n.id===view)
+                ? (NAV.find(n=>n.id===view)?.icon||"≡")
+                : "≡"}
+            </span>
+            <span className="mob-nav-label">
+              {NAV.slice(5).some(n=>n.id===view)
+                ? (NAV.find(n=>n.id===view)?.label||"More")
+                : "More"}
+            </span>
+          </button>
         </div>
       </nav>
     </div>
