@@ -234,12 +234,14 @@ self.addEventListener('fetch', e => {
     .alert-card{animation:borderGlow 2.5s infinite;}
 
     /* RESPONSIVE NAV */
-    .nav-btn{background:none;border:none;cursor:pointer;padding:8px 9px;font-family:'Share Tech Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:0.05em;border-radius:4px;transition:all 0.15s;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;}
+    .nav-btn{background:none;border:none;cursor:pointer;padding:8px 10px;font-family:'Share Tech Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:0.05em;border-radius:4px;transition:all 0.15s;color:var(--text3);white-space:nowrap;}
     .nav-btn:hover{color:var(--text);background:var(--nav-active-bg);}
     .nav-btn.active{color:var(--accent);background:var(--nav-active-bg);border-bottom:2px solid var(--accent);font-weight:700;}
-    /* Desktop nav scroll: hide scrollbar but allow scroll */
-    .desktop-nav{scrollbar-width:none;-ms-overflow-style:none;}
+    /* Desktop nav: takes all remaining space, hides scroll bar */
+    .desktop-nav{flex:1 1 0;min-width:0;display:flex;gap:1px;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none;-ms-overflow-style:none;}
     .desktop-nav::-webkit-scrollbar{display:none;}
+    /* Desktop header right cluster: never shrinks */
+    .hdr-right{flex:0 0 auto;display:flex;align-items:center;gap:6px;}
 
     .chip{background:var(--surface);border:1px solid var(--border);color:var(--text3);cursor:pointer;padding:5px 10px;font-family:'Share Tech Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.07em;border-radius:3px;transition:all 0.15s;}
     .chip:hover{background:var(--bg);color:var(--text);}
@@ -318,92 +320,169 @@ self.addEventListener('fetch', e => {
     .burn-bar-track{height:8px;background:var(--bg);border-radius:4px;overflow:hidden;position:relative;}
     .burn-bar-fill{height:100%;border-radius:4px;transition:width 0.8s ease;}
 
-    /* MOBILE BOTTOM NAV */
-    .mobile-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--header-bg);border-top:2px solid var(--border);z-index:200;padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px);overflow:hidden;}
-    .mobile-nav-inner{display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
-    .mobile-nav-inner::-webkit-scrollbar{display:none;}
-    .mob-nav-btn{flex:1 0 auto;background:none;border:none;cursor:pointer;padding:10px 8px 8px;font-family:'Share Tech Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text4);display:flex;flex-direction:column;align-items:center;gap:4px;min-width:52px;max-width:80px;overflow:hidden;transition:background 0.15s;border-top:2px solid transparent;}
-    .mob-nav-btn.active{color:var(--accent);border-top-color:var(--accent);background:var(--nav-active-bg);}
-    .mob-nav-icon{font-size:20px;line-height:1;}
+    /* ═══════════════════════════════════════════════════════════
+       iPHONE 17 — MOBILE DESIGN SYSTEM
+       Floating glass pill nav · Frosted header · Spring UI
+    ═══════════════════════════════════════════════════════════ */
+
+    /* FLOATING GLASS PILL BOTTOM NAV */
+    .mobile-nav{
+      display:none;position:fixed;bottom:0;left:0;right:0;
+      padding-bottom:calc(env(safe-area-inset-bottom,12px) + 6px);
+      padding-left:env(safe-area-inset-left,0px);
+      padding-right:env(safe-area-inset-right,0px);
+      z-index:200;pointer-events:none;
+    }
+    .mobile-nav-inner{
+      pointer-events:all;
+      display:flex;align-items:center;justify-content:space-around;
+      margin:0 14px;padding:5px 6px;
+      border-radius:26px;
+      background:rgba(255,255,255,0.78);
+      -webkit-backdrop-filter:blur(30px) saturate(200%);
+      backdrop-filter:blur(30px) saturate(200%);
+      border:1px solid rgba(0,0,0,0.09);
+      box-shadow:0 6px 24px rgba(0,0,0,0.12),0 1px 0 rgba(255,255,255,0.6) inset;
+      gap:2px;overflow:visible;
+    }
+    [data-theme="dark"] .mobile-nav-inner,
+    [data-theme="slate"] .mobile-nav-inner,
+    [data-theme="amber"] .mobile-nav-inner,
+    [data-theme="highvis"] .mobile-nav-inner{
+      background:rgba(12,12,22,0.86);
+      border-color:rgba(255,255,255,0.09);
+      box-shadow:0 6px 28px rgba(0,0,0,0.55),0 1px 0 rgba(255,255,255,0.05) inset;
+    }
+    .mob-nav-btn{
+      flex:1;background:none;border:none;cursor:pointer;
+      padding:9px 2px 8px;
+      font-family:'Share Tech Mono',monospace;font-size:8px;
+      text-transform:uppercase;letter-spacing:0.04em;color:var(--text4);
+      display:flex;flex-direction:column;align-items:center;gap:3px;
+      border-radius:20px;min-width:0;
+      transition:color 0.2s ease;
+      -webkit-tap-highlight-color:transparent;
+      position:relative;
+    }
+    .mob-nav-btn:active{animation:navTap 0.14s cubic-bezier(0.34,1.56,0.64,1);}
+    @keyframes navTap{0%,100%{transform:scale(1)}50%{transform:scale(0.88)}}
+    .mob-nav-btn.active{color:var(--accent);}
+    .mob-nav-btn.active::before{
+      content:'';position:absolute;inset:0;border-radius:20px;
+      background:var(--accent)15;
+      animation:navPillIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    @keyframes navPillIn{from{transform:scale(0.6);opacity:0}to{transform:scale(1);opacity:1}}
+    .mob-nav-icon{
+      font-size:21px;line-height:1;
+      transition:transform 0.22s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .mob-nav-btn.active .mob-nav-icon{transform:scale(1.2) translateY(-1px);}
+    .mob-nav-label{font-size:7.5px;letter-spacing:0.03em;line-height:1;}
+    .mob-nav-btn:not(.active) .mob-nav-label{opacity:0.5;}
 
     /* ── MOBILE DRAWER MENU ── */
     .mob-drawer-overlay{position:fixed;inset:0;background:var(--overlay);z-index:350;animation:fadeIn 0.18s ease;}
-    .mob-drawer{position:fixed;top:0;right:0;bottom:0;width:min(300px,88vw);background:var(--modal-bg);border-left:1px solid var(--border);z-index:351;animation:slideIn 0.22s ease;overflow-y:auto;display:flex;flex-direction:column;box-shadow:-8px 0 32px rgba(0,0,0,0.18);}
+    .mob-drawer{position:fixed;top:0;right:0;bottom:0;width:min(300px,88vw);background:var(--modal-bg);border-left:1px solid var(--border);z-index:351;animation:slideIn 0.22s cubic-bezier(0.32,0.72,0,1);overflow-y:auto;display:flex;flex-direction:column;box-shadow:-8px 0 40px rgba(0,0,0,0.2);}
     .mob-drawer-header{padding:16px 18px 12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:var(--modal-bg);z-index:1;}
     .mob-drawer-title{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:0.14em;}
     .mob-drawer-close{background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;padding:4px;line-height:1;}
     .mob-drawer-body{padding:14px 18px;flex:1;}
     .mob-drawer-section{margin-bottom:18px;}
     .mob-drawer-section-label{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--text4);text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;}
-    .mob-drawer-btn{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:11px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:7px;transition:all 0.15s;text-align:left;}
+    .mob-drawer-btn{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:13px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;border-radius:14px;cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:8px;transition:all 0.15s;text-align:left;}
     .mob-drawer-btn:hover{border-color:var(--accent);color:var(--accent);}
     .mob-drawer-btn.admin{border-color:var(--amber)44;background:var(--amber)08;color:var(--amber);}
     .mob-drawer-btn.sync-online{border-color:var(--green)44;background:var(--green)08;color:var(--green);}
     .mob-drawer-btn.sync-offline{border-color:var(--red)44;background:var(--red)08;color:var(--red);}
-    /* Mobile sync badge always visible */
     .sync-badge{display:flex;align-items:center;gap:5px;padding:4px 8px;border-radius:20px;border:1px solid var(--border);background:var(--bg);cursor:pointer;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text3);transition:all 0.15s;white-space:nowrap;overflow:hidden;max-width:140px;text-overflow:ellipsis;}
     .sync-badge:hover{border-color:var(--accent);color:var(--text);}
-    /* Theme row for drawer */
     .theme-row{display:flex;flex-wrap:wrap;gap:8px;padding:8px 0;}
-    /* Hamburger button - always visible on mobile */
-    .mob-menu-btn{display:none;background:none;border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:6px;cursor:pointer;font-size:16px;line-height:1;flex-shrink:0;transition:all 0.15s;}
+    .mob-menu-btn{display:none;background:none;border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:8px;cursor:pointer;font-size:16px;line-height:1;flex-shrink:0;transition:all 0.15s;}
     .mob-menu-btn:hover{border-color:var(--accent);color:var(--accent);}
     @media(max-width:768px){.mob-menu-btn{display:flex;align-items:center;justify-content:center;}}
-
-    /* Mobile sync pill always shown in header */
     .mob-sync-pill{display:none;align-items:center;gap:5px;padding:4px 8px;border-radius:12px;border:1px solid var(--border);background:var(--bg);font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--text3);flex-shrink:0;}
     @media(max-width:768px){.mob-sync-pill{display:flex;}}
 
-    /* ── TABLET / SMALL-LAPTOP (769–1100px): declutter header so nav fits ── */
+    /* ── TABLET (769–1100px) ── */
     @media(min-width:769px) and (max-width:1100px){
-      /* shrink project picker label */
-      .nav-btn{font-size:8.5px;padding:7px 7px;max-width:100px;letter-spacing:0.03em;}
-      /* hide secondary header chrome that eats space */
+      .nav-btn{font-size:8.5px;padding:7px 7px;letter-spacing:0.03em;}
       .hide-tablet{display:none !important;}
-      /* let nav scroll freely when needed */
-      .desktop-nav{overflow-x:auto;flex:1 1 0;min-width:0;}
-      /* tighten right cluster */
+      .desktop-nav{flex:1 1 0;min-width:0;}
       header{gap:5px !important;padding:0 8px !important;}
     }
 
-    /* RESPONSIVE */
-    /* ── GLOBAL ANDROID/MOBILE GUARDS ── */
+    /* ══ GLOBAL MOBILE GUARDS ══ */
     *{-webkit-tap-highlight-color:transparent;}
-    html{overflow-x:hidden;}
-    body{overflow-x:hidden;-webkit-overflow-scrolling:touch;}
-    #root{overflow-x:hidden;}
+    html{overflow-x:hidden;max-width:100vw;}
+    body{overflow-x:hidden;-webkit-overflow-scrolling:touch;max-width:100vw;}
+    #root{overflow-x:hidden;max-width:100vw;}
 
+    /* ══ iPHONE 17 RESPONSIVE LAYOUT ══ */
     @media(max-width:768px){
       .mobile-nav{display:block;}
       .desktop-nav{display:none !important;}
-      /* Larger, finger-friendly bottom nav */
-      .mob-nav-btn{flex:1 0 auto;padding:12px 6px 10px;min-width:52px;font-size:9px;letter-spacing:0.03em;}
-      .mob-nav-icon{font-size:21px;}
-      /* Safe-area-aware bottom padding (Android nav bar + bottom nav) */
-      main{padding:12px 12px calc(72px + env(safe-area-inset-bottom,0px)) 12px !important;}
+      /* Frosted glass header */
+      header{
+        height:52px !important;padding:0 14px !important;overflow:hidden;
+        background:rgba(255,255,255,0.82) !important;
+        -webkit-backdrop-filter:blur(24px) saturate(180%) !important;
+        backdrop-filter:blur(24px) saturate(180%) !important;
+        border-bottom:1px solid rgba(0,0,0,0.07) !important;
+        box-shadow:none !important;
+      }
+      [data-theme="dark"] header,[data-theme="slate"] header,
+      [data-theme="amber"] header,[data-theme="highvis"] header{
+        background:rgba(8,8,18,0.90) !important;
+        border-bottom-color:rgba(255,255,255,0.07) !important;
+      }
+      header>*{flex-shrink:1;min-width:0;}
+      /* Space for floating pill + safe area */
+      main{padding:12px 14px calc(94px + env(safe-area-inset-bottom,0px)) 14px !important;}
+      /* iPhone-radius cards */
+      .card{border-radius:18px !important;}
+      .edit-row{border-radius:12px !important;}
+      /* Bottom sheet with pull handle */
+      .edit-panel{
+        top:auto !important;right:0 !important;left:0 !important;bottom:0 !important;
+        width:100% !important;border-left:none !important;
+        border-top:none !important;border-radius:26px 26px 0 0 !important;
+        max-height:92vh !important;
+        animation:slideUp 0.32s cubic-bezier(0.32,0.72,0,1) !important;
+      }
+      .edit-panel::before{
+        content:'';display:block;width:36px;height:4px;
+        background:var(--border2);border-radius:2px;margin:10px auto 0;
+      }
+      /* Grids */
       .page-grid-2{grid-template-columns:1fr !important;}
       .page-grid-3{grid-template-columns:1fr 1fr !important;}
       .page-grid-5{grid-template-columns:1fr 1fr !important;}
       .page-grid-4{grid-template-columns:1fr 1fr !important;}
       .gantt-label{width:80px !important;font-size:8px !important;}
       .hide-mobile{display:none !important;}
-      /* Header: constrain to screen width, no overflow */
-      header{overflow:hidden;padding:0 10px !important;max-width:100vw;}
-      header>*{flex-shrink:1;min-width:0;}
-      /* Share modal: single column on mobile */
       .share-channels{grid-template-columns:1fr !important;}
       .share-modal{padding:16px !important;width:94vw !important;}
-      /* Tables: horizontal scroll instead of layout break */
       .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;}
       .tbl-wrap table{min-width:480px;}
-      /* Prevent card overflow */
       .card,.edit-row{max-width:100%;overflow:hidden;word-break:break-word;}
-      /* Toast: wrap text, don't clip off screen */
-      .toast{max-width:90vw;white-space:normal;text-align:center;font-size:10px;padding:9px 14px;}
-      /* Auth split: stack on mobile */
+      /* Toast floats above pill */
+      .toast{
+        max-width:88vw;white-space:normal;text-align:center;
+        font-size:11px;padding:12px 18px;border-radius:20px !important;
+        bottom:calc(96px + env(safe-area-inset-bottom,0px)) !important;
+        box-shadow:0 8px 32px rgba(0,0,0,0.2) !important;
+      }
       .auth-split-right{display:none !important;}
       .auth-form-panel{width:100% !important;max-width:100% !important;}
-      /* Reduce excessive letter-spacing on app UI at mobile widths */
+      /* iOS sizing */
+      button,select,input{min-height:44px;}
+      .btn-primary{border-radius:14px !important;}
+      .btn-ghost{border-radius:12px !important;}
+      .field-input,.field-select{border-radius:14px !important;font-size:14px !important;padding:12px 16px !important;}
+      .chip{border-radius:12px;}
+      th{font-size:8px;padding:8px 10px;}
+      td{font-size:10px;padding:9px 10px;}
       .nav-btn{letter-spacing:0.03em;}
       .edit-section-title{letter-spacing:0.08em;}
       .field-label{letter-spacing:0.07em;}
@@ -417,26 +496,17 @@ self.addEventListener('fetch', e => {
       .page-grid-3{grid-template-columns:1fr !important;}
       .page-grid-4{grid-template-columns:1fr 1fr !important;}
       .page-grid-5{grid-template-columns:1fr 1fr !important;}
-      /* Budget Android phones (Tecno, Neon, Itel etc.) — generous tap targets */
-      .mob-nav-btn{flex:1 0 auto;min-width:48px;padding:12px 4px 10px;font-size:8.5px;letter-spacing:0.02em;}
-      .mob-nav-icon{font-size:20px;}
-      .nav-btn{padding:10px 6px;font-size:8.5px;letter-spacing:0.02em;}
-      button,select,input{min-height:40px;}
-      /* Tables: extra tight on very small screens */
-      th{font-size:8px;padding:6px 8px;letter-spacing:0.06em;}
+      .mob-nav-icon{font-size:19px;}
+      th{font-size:8px;padding:6px 8px;}
       td{font-size:9px;padding:7px 8px;}
-      /* Chips and small labels */
-      .chip{font-size:8px;letter-spacing:0.06em;padding:5px 8px;}
-      .field-label{font-size:8px;letter-spacing:0.06em;}
-      /* Buttons in app panels */
-      .btn-primary{font-size:9px;letter-spacing:0.06em;padding:10px 14px;}
-      .btn-ghost{font-size:9px;letter-spacing:0.04em;padding:8px 12px;}
-      .edit-section-title{font-size:9px;letter-spacing:0.08em;}
-      .edit-tab{font-size:8px;letter-spacing:0.06em;padding:8px 8px;}
+      .chip{font-size:8px;padding:5px 8px;}
+      .field-label{font-size:8px;}
+      .edit-section-title{font-size:9px;}
+      .edit-tab{font-size:8px;padding:8px 8px;}
     }
     @media(max-width:360px){
-      .mob-nav-btn{min-width:36px;padding:9px 5px;font-size:7px;letter-spacing:0.01em;}
-      .mob-nav-icon{font-size:16px;}
+      .mob-nav-icon{font-size:17px;}
+      .mob-nav-label{display:none;}
       td{font-size:8.5px;padding:6px 6px;}
       th{font-size:7.5px;padding:5px 6px;}
     }
@@ -7408,28 +7478,28 @@ function App(){
       )}
 
       {/* HEADER */}
-      <header style={{borderBottom:"1px solid var(--border)",padding:"0 12px",background:"var(--header-bg)",display:"flex",alignItems:"center",gap:"8px",height:"54px",position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",overflow:"visible",minWidth:0}}>
-        {/* Project picker */}
-        <button onClick={()=>setShowProjectPicker(s=>!s)} style={{display:"flex",alignItems:"center",gap:"10px",background:"none",border:"none",cursor:"pointer",paddingRight:"12px",borderRight:"1px solid var(--border)",marginRight:"4px",flexShrink:0,minWidth:0}}>
+      <header style={{borderBottom:"1px solid var(--border)",padding:"0 12px",background:"var(--header-bg)",display:"flex",alignItems:"center",gap:"8px",height:"54px",position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",overflow:"hidden",minWidth:0}}>
+        {/* Project picker — fixed width, never shrinks */}
+        <button onClick={()=>setShowProjectPicker(s=>!s)} style={{display:"flex",alignItems:"center",gap:"10px",background:"none",border:"none",cursor:"pointer",paddingRight:"12px",borderRight:"1px solid var(--border)",marginRight:"4px",flexShrink:0}}>
           <div style={{display:"flex",flexDirection:"column",gap:"2px",flexShrink:0}}>
             <div style={{display:"flex",gap:"2px"}}>{["#E53E3E","#D69E2E","#38A169"].map((c,j)=><div key={j} style={{width:"7px",height:"7px",background:c,borderRadius:"1px",opacity:0.8}}/>)}</div>
             <div style={{display:"flex",gap:"2px"}}>{["#3182CE","#805AD5","#D69E2E"].map((c,j)=><div key={j} style={{width:"7px",height:"7px",background:c,borderRadius:"1px",opacity:0.8}}/>)}</div>
           </div>
           <div style={{textAlign:"left"}}>
-            <div style={{fontSize:"12px",fontWeight:"900",color:"var(--text)",letterSpacing:"0.05em",textTransform:"uppercase",lineHeight:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"140px"}}>{site.name?.split(" ").slice(0,3).join(" ")||"AHP"}</div>
-            <div style={{fontSize:"8px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",letterSpacing:"0.08em",marginTop:"1px",whiteSpace:"nowrap"}}>▾ SWITCH PROJECT</div>
+            <div style={{fontSize:"12px",fontWeight:"900",color:"var(--text)",letterSpacing:"0.05em",textTransform:"uppercase",lineHeight:1,whiteSpace:"nowrap",maxWidth:"130px",overflow:"hidden",textOverflow:"ellipsis"}}>{site.name?.split(" ").slice(0,3).join(" ")||"AHP"}</div>
+            <div style={{fontSize:"8px",color:"var(--text4)",fontFamily:"'Share Tech Mono',monospace",letterSpacing:"0.08em",marginTop:"1px",whiteSpace:"nowrap"}}>▾ SWITCH</div>
           </div>
         </button>
 
-        {/* DESKTOP NAV */}
-        <nav className="desktop-nav" style={{display:"flex",gap:"1px",overflowX:"auto",flexWrap:"nowrap"}}>
+        {/* DESKTOP NAV — flex:1, scrolls horizontally if needed */}
+        <nav className="desktop-nav">
           {NAV.map(({id,label})=>(
             <button key={id} className={`nav-btn ${view===id?"active":""}`} onClick={()=>setView(id)}>{label}</button>
           ))}
         </nav>
 
-        {/* RIGHT SIDE — desktop full controls */}
-        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"8px",flexShrink:0}}>
+        {/* RIGHT SIDE — fixed, never grows */}
+        <div className="hdr-right">
           <div className="hide-mobile hide-tablet" style={{fontFamily:"'Share Tech Mono',monospace",fontSize:"9px",color:"var(--text4)"}}>{time.toLocaleTimeString("en-KE",{hour12:false})} EAT</div>
 
           {/* SYNC STATUS — desktop */}
@@ -7961,20 +8031,15 @@ function App(){
 
       </main>
 
-      {/* MOBILE BOTTOM NAV */}
+      {/* MOBILE BOTTOM NAV — iPhone 17 floating glass pill */}
       <nav className="mobile-nav">
-        {/* Scroll hint gradient on right edge */}
-        <div style={{position:"relative"}}>
-          <div className="mobile-nav-inner">
-            {NAV.map(({id,label,icon})=>(
-              <button key={id} className={`mob-nav-btn ${view===id?"active":""}`} onClick={()=>setView(id)}>
-                <span className="mob-nav-icon">{icon}</span>
-                <span style={{fontSize:"8px",letterSpacing:"0.04em"}}>{label}</span>
-              </button>
-            ))}
-          </div>
-          {/* Fade-right hint to indicate scrollable nav */}
-          <div style={{position:"absolute",right:0,top:0,bottom:0,width:"28px",background:"linear-gradient(to right,transparent,var(--header-bg))",pointerEvents:"none"}}/>
+        <div className="mobile-nav-inner">
+          {NAV.map(({id,label,icon})=>(
+            <button key={id} className={`mob-nav-btn ${view===id?"active":""}`} onClick={()=>setView(id)}>
+              <span className="mob-nav-icon">{icon}</span>
+              <span className="mob-nav-label">{label}</span>
+            </button>
+          ))}
         </div>
       </nav>
     </div>
