@@ -6018,12 +6018,33 @@ const sbReady = () => FCC_CONFIG.supabaseUrl && FCC_CONFIG.supabaseKey;
 // Always send the user's JWT when available — required for owner_id = auth.uid() RLS
 const sbAuthToken = () => {
   try {
-    const p = JSON.parse(localStorage.getItem("mradi_profile")||"{}");
-    return p.access_token || FCC_CONFIG.supabaseKey;
+    // fcc_user holds the Supabase access_token; mradi_profile is local-only
+    const u = JSON.parse(localStorage.getItem("fcc_user")||"{}");
+    return u.access_token || FCC_CONFIG.supabaseKey;
   } catch { return FCC_CONFIG.supabaseKey; }
 };
 
-const sbFetch = async (path, opts={}) => {
+// Refresh the JWT using the stored refresh_token. Returns new access_token or null.
+const sbRefreshSession = async () => {
+  try {
+    const u = JSON.parse(localStorage.getItem("fcc_user")||"{}");
+    if(!u.refresh_token) return null;
+    const res = await fetch(`${FCC_CONFIG.supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: { "apikey": FCC_CONFIG.supabaseKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: u.refresh_token })
+    });
+    if(!res.ok) return null;
+    const data = await res.json();
+    if(!data.access_token) return null;
+    // Persist refreshed tokens
+    const updated = { ...u, access_token: data.access_token, refresh_token: data.refresh_token || u.refresh_token };
+    localStorage.setItem("fcc_user", JSON.stringify(updated));
+    return data.access_token;
+  } catch { return null; }
+};
+
+const sbFetch = async (path, opts={}, _retry=false) => {
   const res = await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/${path}`, {
     headers: {
       "apikey":         FCC_CONFIG.supabaseKey,
@@ -6034,7 +6055,15 @@ const sbFetch = async (path, opts={}) => {
     },
     ...opts
   });
-  if(!res.ok) throw new Error(await res.text());
+  if(!res.ok) {
+    const txt = await res.text();
+    // Auto-refresh on JWT expired — try once
+    if(!_retry && (txt.includes("JWT expired") || txt.includes("PGRST303"))) {
+      const newToken = await sbRefreshSession();
+      if(newToken) return sbFetch(path, opts, true);
+    }
+    throw new Error(txt);
+  }
   return res.json();
 };
 
@@ -6092,7 +6121,7 @@ const sbSignup = async (name, email, password) => {
   // Supabase returns user in data.user (email confirm OFF) or data.identities (confirm ON)
   const userId = data.user?.id || data.id;
   if(!userId) throw new Error("Account created — check your email to confirm before signing in.");
-  const u = { id:userId, name, email, role:"owner", plan:"free", org:"", createdAt:new Date().toISOString(), access_token:data.access_token||null };
+  const u = { id:userId, name, email, role:"owner", plan:"free", org:"", createdAt:new Date().toISOString(), access_token:data.access_token||null, refresh_token:data.refresh_token||null };
   try{ localStorage.setItem("fcc_user", JSON.stringify(u)); }catch{}
   return { user:u };
 };
@@ -6131,7 +6160,8 @@ const sbLogin = async (email, password) => {
     name: data.user?.user_metadata?.name || email.split("@")[0],
     email,
     role: "owner", plan: "free", org: "",
-    access_token: data.access_token
+    access_token:  data.access_token,
+    refresh_token: data.refresh_token || null
   };
   try{ localStorage.setItem("fcc_user", JSON.stringify(u)); }catch{}
   return { user:u };
@@ -6188,7 +6218,28 @@ const sbSaveProject = async (userId, project) => {
         updated_at: stamped.updated_at
       })
     });
-    if(!res.ok){ const txt = await res.text(); console.warn("[Mradi] Save failed:", txt); }
+    if(!res.ok){
+      const txt = await res.text();
+      // Auto-refresh and retry once on JWT expired
+      if(txt.includes("JWT expired") || txt.includes("PGRST303")) {
+        const newToken = await sbRefreshSession();
+        if(newToken) {
+          const res2 = await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/fcc_projects`, {
+            method:"POST",
+            headers:{
+              "apikey":        FCC_CONFIG.supabaseKey,
+              "Authorization": `Bearer ${newToken}`,
+              "Content-Type":  "application/json",
+              "Prefer":        "resolution=merge-duplicates,return=minimal"
+            },
+            body: JSON.stringify({ id:stamped.id||("proj-"+Date.now()), owner_id:userId, org_id:getOrgId()||null, data:stamped, updated_at:stamped.updated_at })
+          });
+          if(!res2.ok){ const t2=await res2.text(); console.warn("[Mradi] Save retry failed:", t2); }
+          return;
+        }
+      }
+      console.warn("[Mradi] Save failed:", txt);
+    }
   }catch(e){ console.warn("[Mradi] Save skipped (offline):", e.message); }
 };
 
@@ -6247,6 +6298,38 @@ const sbSaveSnapshot = async (payload, userId) => {
   }
   if(!res.ok) {
     const txt = await res.text().catch(()=>"");
+    // Auto-refresh JWT and retry once
+    if(txt.includes("JWT expired") || txt.includes("PGRST303")) {
+      const newToken = await sbRefreshSession();
+      if(newToken) {
+        // Retry with fresh token
+        const res2 = await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/fcc_snapshots`, {
+          method: "POST",
+          headers: {
+            "apikey":        FCC_CONFIG.supabaseKey,
+            "Authorization": `Bearer ${newToken}`,
+            "Content-Type":  "application/json",
+            "Prefer":        "return=minimal"
+          },
+          body: JSON.stringify({ id, data: payload, created_by: userId || null })
+        });
+        if(res2.ok) return id;
+        const txt2 = await res2.text().catch(()=>"");
+        throw new Error("Failed to save snapshot: " + (txt2||res2.status));
+      }
+      // No refresh token available — try with anon key (RLS allows public insert)
+      const res3 = await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/fcc_snapshots`, {
+        method: "POST",
+        headers: {
+          "apikey":        FCC_CONFIG.supabaseKey,
+          "Authorization": `Bearer ${FCC_CONFIG.supabaseKey}`,
+          "Content-Type":  "application/json",
+          "Prefer":        "return=minimal"
+        },
+        body: JSON.stringify({ id, data: payload, created_by: userId || null })
+      });
+      if(res3.ok) return id;
+    }
     throw new Error("Failed to save snapshot: " + (txt||res.status));
   }
   return id;
