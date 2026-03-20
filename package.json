@@ -1,0 +1,23 @@
+{
+  "name": "field-command-centre",
+  "version": "2.0.0",
+  "description": "Mradi HQ v2.0 — Field Command Centre - GPS attendance, site diary, payments & reports",
+  "type": "module",
+  "scripts": {
+    "dev": "npx http-server -p 3000",
+    "build": "echo 'No build step required for static HTML'",
+    "lint": "echo 'No linter configured yet'",
+    "test": "echo 'No tests configured yet'"
+  },
+  "keywords": [
+    "field-management",
+    "construction",
+    "attendance",
+    "site-diary"
+  ],
+  "author": "KimGero",
+  "license": "SEE LICENSE IN LICENSE",
+  "devDependencies": {
+    "@vercel/speed-insights": "^1.1.0"
+  }
+}
