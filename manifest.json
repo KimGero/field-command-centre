@@ -1,0 +1,27 @@
+{
+  "name": "Mradi HQ v2.0 — Field Command Centre",
+  "short_name": "Mradi HQ",
+  "description": "Site diary, GPS attendance, M-Pesa payments, materials & client reports — built for African contractors.",
+  "start_url": "./",
+  "id": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#07070D",
+  "theme_color": "#FF5C00",
+  "categories": ["business", "productivity", "utilities"],
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Site Diary",      "short_name": "Diary",      "url": "./?view=diary",      "description": "Log today's site progress" },
+    { "name": "Overview",        "short_name": "Overview",   "url": "./?view=overview",   "description": "Project command centre" },
+    { "name": "Team Attendance", "short_name": "Attendance", "url": "./?view=team",       "description": "GPS worker check-in" },
+    { "name": "Materials",       "short_name": "Materials",  "url": "./?view=materials",  "description": "Track material stock" }
+  ],
+  "prefer_related_applications": false
+}
