@@ -26,7 +26,7 @@
       if(typeof gtag!=='undefined') gtag('event',event,params||{});
     };
   </script>
-  <link rel="manifest" href="/field-command-centre/manifest.json"/>
+  <link rel="manifest" href="./manifest.json"/>
   </script>
     <link rel="apple-touch-icon" sizes="192x192" href="./icon-192.png"/>
   <link rel="apple-touch-icon" sizes="512x512" href="./icon-512.png"/>
@@ -103,7 +103,7 @@
       console.info('[Mradi SW] Skipped — file:// protocol. Host on Vercel/Netlify for PWA install.');
       return;
     }
-    navigator.serviceWorker.register('/field-command-centre/sw.js', { scope: './' })
+    navigator.serviceWorker.register('./sw.js', { scope: './' })
       .then(reg => {
         console.log('[Mradi SW] Registered ✓ scope:', reg.scope);
         reg.addEventListener('updatefound', () => {
