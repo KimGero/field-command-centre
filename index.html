@@ -7771,10 +7771,18 @@ const sbRefreshSession = async () => {
 };
 
 const sbFetch = async (path, opts={}, _retry=false) => {
+  // Guard: if the stored token is just the anon key (user not logged in),
+  // skip requests to tables that require a real JWT to avoid noisy 401s.
+  const token = sbAuthToken();
+  const isAnonOnly = token === FCC_CONFIG.supabaseKey;
+  const authRequired = /^(fcc_projects|fcc_users|fcc_org_members)/.test(path);
+  if(isAnonOnly && authRequired && (opts.method || "GET") !== "GET") {
+    throw new Error("Not authenticated — request skipped");
+  }
   const res = await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/${path}`, {
     headers: {
       "apikey":         FCC_CONFIG.supabaseKey,
-      "Authorization":  `Bearer ${sbAuthToken()}`,
+      "Authorization":  `Bearer ${token}`,
       "Content-Type":   "application/json",
       "Prefer":         "return=representation",
       ...(opts.headers||{})
@@ -7788,6 +7796,11 @@ const sbFetch = async (path, opts={}, _retry=false) => {
       const newToken = await sbRefreshSession();
       if(newToken) return sbFetch(path, opts, true);
     }
+    // Suppress infinite-recursion RLS errors from crashing the app
+    if(txt.includes("42P17") || txt.includes("infinite recursion")) {
+      console.warn("[Mradi] Supabase RLS infinite recursion on:", path, "— skipping. Fix the fcc_org_members policy in your Supabase dashboard.");
+      throw new Error("RLS_RECURSION:" + txt);
+    }
     throw new Error(txt);
   }
   return res.json();
@@ -7796,6 +7809,8 @@ const sbFetch = async (path, opts={}, _retry=false) => {
 // Upsert a row in fcc_users for analytics (non-blocking)
 const sbTrackUser = async (user) => {
   if(!sbReady() || !user?.id || user.id.startsWith("local-") || user.id.startsWith("guest-")) return;
+  // Only fire when we have a real JWT — avoids 401 noise when user isn't logged in yet
+  if(sbAuthToken() === FCC_CONFIG.supabaseKey) return;
   try {
     await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/fcc_users`, {
       method: "POST",
@@ -7985,6 +8000,13 @@ const sbSaveProject = async (userId, project) => {
     // Notify any sync banner listeners
     window.dispatchEvent(new CustomEvent("mradi_sync_ok", {detail:{id:project.id}}));
   }catch(e){
+    // If the failure is the RLS recursion bug, don't queue for sync — it will always fail
+    // until the Supabase policy is fixed. Just write locally and warn once.
+    if(e.message?.includes("RLS_RECURSION") || e.message?.includes("42P17") || e.message?.includes("infinite recursion")){
+      console.warn("[Mradi] Save local only — Supabase fcc_org_members RLS policy has infinite recursion. Fix in Supabase dashboard.");
+      writeLocalCache();
+      return;
+    }
     console.warn("[Mradi] Save offline — queued for sync:", e.message);
     writeLocalCache();
     enqueueSync();
@@ -8014,8 +8036,10 @@ if(typeof window !== "undefined"){
 //    Called on org create + org join. Best-effort; silent on failure.
 const sbSyncOrgMember = async (userId, orgId, role) => {
   if(!sbReady() || !userId || !orgId || String(userId).startsWith("guest-") || String(userId).startsWith("local-")) return;
+  // Skip if not authenticated (token is just the anon key)
+  if(sbAuthToken() === FCC_CONFIG.supabaseKey) return;
   try{
-    await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/fcc_org_members`, {
+    const res = await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/fcc_org_members`, {
       method:"POST",
       headers:{
         "apikey":        FCC_CONFIG.supabaseKey,
@@ -8025,7 +8049,19 @@ const sbSyncOrgMember = async (userId, orgId, role) => {
       },
       body: JSON.stringify({ org_id: orgId, user_id: userId, role: role||"member" })
     });
-  }catch(e){ console.warn("[Mradi] Org member sync skipped:", e.message); }
+    if(!res.ok){
+      const txt = await res.text().catch(()=>"");
+      if(txt.includes("42P17") || txt.includes("infinite recursion")){
+        // ⚠️ Your fcc_org_members RLS policy has infinite recursion.
+        // Fix in Supabase dashboard: replace the SELECT policy with a
+        // SECURITY DEFINER function that doesn't re-query the same table.
+        console.warn("[Mradi] fcc_org_members RLS infinite recursion — membership sync skipped. Fix the Supabase RLS policy.");
+        return;
+      }
+    }
+  }catch(e){
+    if(!e.message?.includes("RLS_RECURSION")) console.warn("[Mradi] Org member sync skipped:", e.message);
+  }
 };
 
 /* ── 4a-2. SNAPSHOT SHORT-LINK HELPERS ───────────────────────────
@@ -11602,6 +11638,22 @@ function App(){
   const [online,setOnline]     = useState(()=>navigator.onLine);
   const [syncing,setSyncing]   = useState(false);
   const [lastSync,setLastSync] = useState(()=>load("ahp_lastSync")||null);
+  // ── Offline Sync Banner state — MUST stay above early-return gates (Rules of Hooks) ──
+  const [syncQueued, setSyncQueued] = React.useState(() => {
+    try{ return JSON.parse(localStorage.getItem("mradi_sync_queue")||"[]").length > 0; }catch{ return false; }
+  });
+  React.useEffect(()=>{
+    const onQueued = () => setSyncQueued(true);
+    const onOk     = () => {
+      try{
+        const q = JSON.parse(localStorage.getItem("mradi_sync_queue")||"[]");
+        if(q.length === 0) setSyncQueued(false);
+      }catch{ setSyncQueued(false); }
+    };
+    window.addEventListener("mradi_sync_queued", onQueued);
+    window.addEventListener("mradi_sync_ok",     onOk);
+    return ()=>{ window.removeEventListener("mradi_sync_queued",onQueued); window.removeEventListener("mradi_sync_ok",onOk); };
+  }, []);
   const [showMobileMenu,setShowMobileMenu] = useState(false);
   const [navOpen,setNavOpen] = useState(false);
   const [sideNavCollapsed,setSideNavCollapsed] = useState(false);
@@ -12199,21 +12251,6 @@ function App(){
   }
 
   // ── Offline Sync Banner ──────────────────────────────────────────
-  const [syncQueued, setSyncQueued] = React.useState(() => {
-    try{ return JSON.parse(localStorage.getItem("mradi_sync_queue")||"[]").length > 0; }catch{ return false; }
-  });
-  React.useEffect(()=>{
-    const onQueued = () => setSyncQueued(true);
-    const onOk     = () => {
-      try{
-        const q = JSON.parse(localStorage.getItem("mradi_sync_queue")||"[]");
-        if(q.length === 0) setSyncQueued(false);
-      }catch{ setSyncQueued(false); }
-    };
-    window.addEventListener("mradi_sync_queued", onQueued);
-    window.addEventListener("mradi_sync_ok",     onOk);
-    return ()=>{ window.removeEventListener("mradi_sync_queued",onQueued); window.removeEventListener("mradi_sync_ok",onOk); };
-  }, []);
   const OfflineSyncBanner = syncQueued ? (
     <div style={{background:"#744210",color:"#FEFCBF",padding:"6px 16px",display:"flex",alignItems:"center",gap:"8px",fontSize:"12px",fontFamily:"'JetBrains Mono',monospace"}}>
       <span style={{animation:"pulse2 1.5s infinite",display:"inline-block",width:"7px",height:"7px",borderRadius:"50%",background:"#F6E05E",flexShrink:0}}/>
