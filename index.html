@@ -7741,7 +7741,160 @@ const sbTrackUser = async (user) => {
       })
     });
   } catch(e) { /* non-critical */ }
+  // Start/resume analytics session on first track call for this user
+  _mradiAnalytics.startSession(user, user?.org || null);
 };
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  Mradi Analytics — Page views, events, sessions → fcc_page_views / fcc_events
+//  All calls are best-effort and silent on failure.
+//  Requires: sbReady(), sbAuthToken(), FCC_CONFIG
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _mradiAnalytics = (() => {
+  // ── Session ────────────────────────────────────────────────────────────────
+  const SESSION_KEY = "mradi_session_id";
+  let _sessionId = null;
+  let _sessionUserId = null;
+  let _sessionOrgId = null;
+  let _pageCount = 0;
+  let _lastPage = null;
+  let _lastPageAt = null;
+
+  const getSessionId = () => {
+    if(_sessionId) return _sessionId;
+    try {
+      _sessionId = sessionStorage.getItem(SESSION_KEY);
+    } catch {}
+    if(!_sessionId) {
+      _sessionId = "s-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      try { sessionStorage.setItem(SESSION_KEY, _sessionId); } catch {}
+    }
+    return _sessionId;
+  };
+
+  const _post = async (table, payload) => {
+    if(!sbReady()) return;
+    const token = sbAuthToken();
+    if(!token || token === FCC_CONFIG.supabaseKey) return; // not authed
+    try {
+      await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/${table}`, {
+        method: "POST",
+        headers: {
+          "apikey":        FCC_CONFIG.supabaseKey,
+          "Authorization": `Bearer ${token}`,
+          "Content-Type":  "application/json",
+          "Prefer":        "return=minimal"
+        },
+        body: JSON.stringify(payload)
+      });
+    } catch {}
+  };
+
+  const _patch = async (table, filter, payload) => {
+    if(!sbReady()) return;
+    const token = sbAuthToken();
+    if(!token || token === FCC_CONFIG.supabaseKey) return;
+    try {
+      await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/${table}?${filter}`, {
+        method: "PATCH",
+        headers: {
+          "apikey":        FCC_CONFIG.supabaseKey,
+          "Authorization": `Bearer ${token}`,
+          "Content-Type":  "application/json",
+          "Prefer":        "return=minimal"
+        },
+        body: JSON.stringify(payload)
+      });
+    } catch {}
+  };
+
+  // ── Public API ─────────────────────────────────────────────────────────────
+
+  const startSession = async (user, orgId) => {
+    _sessionUserId = user?.id || null;
+    _sessionOrgId  = orgId || user?.org || null;
+    _pageCount = 0;
+    getSessionId(); // ensure ID generated
+
+    const ua = navigator.userAgent || "";
+    let platform = "desktop";
+    if(window.matchMedia("(display-mode: standalone)").matches) platform = "pwa";
+    else if(/android/i.test(ua)) platform = "android";
+    else if(/iphone|ipad/i.test(ua)) platform = "ios";
+
+    await _post("fcc_sessions", {
+      id:         _sessionId,
+      user_id:    _sessionUserId,
+      org_id:     _sessionOrgId,
+      plan:       user?.plan || "free",
+      platform,
+      user_agent: ua.slice(0, 200),
+      screen_w:   window.screen?.width  || null,
+      screen_h:   window.screen?.height || null,
+      page_count: 0
+    });
+  };
+
+  const trackPage = async (page, userId, orgId) => {
+    const uid  = userId  || _sessionUserId;
+    const oid  = orgId   || _sessionOrgId;
+    const sid  = getSessionId();
+    const now  = Date.now();
+
+    // Patch duration onto the previous page view
+    if(_lastPage && _lastPageAt) {
+      await _patch("fcc_page_views",
+        `session_id=eq.${encodeURIComponent(sid)}&page=eq.${encodeURIComponent(_lastPage)}&duration_ms=is.null`,
+        { duration_ms: now - _lastPageAt }
+      );
+    }
+
+    _lastPage   = page;
+    _lastPageAt = now;
+    _pageCount++;
+
+    await _post("fcc_page_views", {
+      user_id:    uid,
+      org_id:     oid,
+      session_id: sid,
+      page,
+      referrer:   document.referrer || null
+    });
+
+    // Update session page count
+    await _patch("fcc_sessions", `id=eq.${encodeURIComponent(sid)}`, {
+      page_count: _pageCount,
+      ended_at:   new Date().toISOString()
+    });
+  };
+
+  const trackEvent = async (event, properties = {}, userId, orgId) => {
+    const uid = userId || _sessionUserId;
+    const oid = orgId  || _sessionOrgId;
+    await _post("fcc_events", {
+      user_id:    uid,
+      org_id:     oid,
+      session_id: getSessionId(),
+      event,
+      properties
+    });
+  };
+
+  // Also mirror to GA (if loaded and not blocked)
+  const track = (event, properties = {}) => {
+    trackEvent(event, properties);
+    try {
+      if(typeof gtag !== "undefined") gtag("event", event, properties);
+    } catch {}
+  };
+
+  return { startSession, trackPage, trackEvent, track, getSessionId };
+})();
+
+// Replace the old window.fccTrack with the new analytics-backed version
+window.fccTrack = (event, params) => _mradiAnalytics.track(event, params || {});
+
 
 const sbSignup = async (name, email, password) => {
   if(!sbReady()) {
@@ -11488,6 +11641,12 @@ function App(){
   };
   const goHome=()=>{setShowLanding(true);window.scrollTo({top:0,behavior:"smooth"});};
   useEffect(()=>{persist("ahp_activeProject",activeProject);},[activeProject]);
+  // ── Page-view tracking on every view change ─────────────────────────────────
+  React.useEffect(()=>{
+    if(!view || !profile?.id) return;
+    _mradiAnalytics.trackPage(view, profile?.id, profile?.org || null);
+  }, [view, profile?.id]);
+
 
   const [view,setView] = useState(()=>{
     // Handle ?upgraded=plan&ref=xxx — Paystack redirect activates the plan
