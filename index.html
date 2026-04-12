@@ -68,9 +68,9 @@
       prefer_related_applications: false,
     };
 
-    const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
-    const url  = URL.createObjectURL(blob);
-    document.getElementById('mradi-manifest').setAttribute('href', url);
+    const manifestStr = JSON.stringify(manifest);
+    const dataUri = 'data:application/manifest+json,' + encodeURIComponent(manifestStr);
+    document.getElementById('mradi-manifest').setAttribute('href', dataUri);
   })();
   </script>
   <meta name="mobile-web-app-capable" content="yes"/>
@@ -130,98 +130,11 @@
   (function(){
     if(!('serviceWorker' in navigator)) return;
     // Build an inline SW that caches this page + CDN assets
-    const SW_SRC = `
-const CACHE_NAME = 'mradi-hq-v2';
-const SELF_URL = self.location.href.split('?')[0];
-
-// On install: cache the app shell
-self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll([SELF_URL]).catch(()=>{});
-    })
-  );
-  self.skipWaiting();
-});
-
-// On activate: clean old caches
-self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))
-    )
-  );
-  self.clients.claim();
-});
-
-// On fetch: network-first with offline fallback
-self.addEventListener('fetch', e => {
-  if(e.request.method !== 'GET') return;
-  e.respondWith(
-    fetch(e.request)
-      .then(res => {
-        if(res.ok && (e.request.url.startsWith(self.location.origin) || e.request.url.includes('cdnjs.cloudflare.com'))) {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
-        }
-        return res;
-      })
-      .catch(() => caches.match(e.request))
-  );
-});
-
-// Push notifications — receive server push or local postMessage trigger
-self.addEventListener('push', e => {
-  let data = { title: 'Mradi HQ', body: 'You have a new alert.', tag: 'mradi-alert', icon: '/icon-192.png' };
-  try { data = { ...data, ...e.data.json() }; } catch(_) {}
-  e.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      tag: data.tag,
-      icon: data.icon || '/icon-192.png',
-      badge: '/icon-192.png',
-      vibrate: [200, 100, 200],
-      requireInteraction: data.requireInteraction || false,
-      data: { url: data.url || '/' }
-    })
-  );
-});
-
-// Local notification trigger (postMessage from app)
-self.addEventListener('message', e => {
-  if(e.data?.type === 'SHOW_NOTIFICATION') {
-    const d = e.data;
-    self.registration.showNotification(d.title || 'Mradi HQ', {
-      body: d.body || '',
-      tag: d.tag || 'mradi-local',
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
-      vibrate: [150, 75, 150],
-      requireInteraction: !!d.requireInteraction,
-      data: { url: d.url || '/' }
-    });
-  }
-});
-
-self.addEventListener('notificationclick', e => {
-  e.notification.close();
-  const url = e.notification.data?.url || '/';
-  e.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-      const existing = list.find(c => c.url && c.focus);
-      if(existing) return existing.focus();
-      return clients.openWindow(url);
-    })
-  );
-});
-    `;
     if(!['https:','http:'].includes(location.protocol)){
       console.info('[Mradi SW] Skipped — open from Vercel/Netlify for offline support');
     } else
     try {
-      const blob = new Blob([SW_SRC], {type:'text/javascript'});
-      const swUrl = URL.createObjectURL(blob);
-      navigator.serviceWorker.register(swUrl, {scope:'./'})
+      navigator.serviceWorker.register('/sw.js', {scope:'/'})
         .then(reg => {
           reg.addEventListener('updatefound', () => {
             const nw = reg.installing;
@@ -231,11 +144,10 @@ self.addEventListener('notificationclick', e => {
               }
             });
           });
-          // Expose sync trigger
           window.__mradiSWRegistration = reg;
         })
         .catch(e => console.warn('[Mradi SW] Registration skipped:', e.message));
-    } catch(e) { /* blob URL SW not supported in this context */ }
+    } catch(e) { /* SW not supported in this context */ }
 
     // ── Capture beforeinstallprompt for custom install button ──
     window.__pwaInstallPrompt = null;
@@ -7456,7 +7368,7 @@ const FCC_CONFIG = {
 
   // ── Paystack LIVE (cards + M-Pesa via Paystack) ────────────────
   // Get from: dashboard.paystack.com → Settings → API Keys & Webhooks
-  paystackPublicKey: "pk_test_63e1fcfd734d117a23475494ea27c8499d1eb634",  // ⚠ Replace with pk_live_... for real charges
+  paystackPublicKey: "pk_live_3994cce5b5e23ba8b240cbb4dcff1f811f5a81b7",  // ⚠ Replace with pk_live_... for real charges
 };
 
 /* ── 2. PAYWALL ENGINE ──────────────────────────────────────────
@@ -7771,13 +7683,13 @@ const sbRefreshSession = async () => {
 };
 
 const sbFetch = async (path, opts={}, _retry=false) => {
-  // Guard: if the stored token is just the anon key (user not logged in),
-  // skip requests to tables that require a real JWT to avoid noisy 401s.
+  // Guard: skip write requests if only the anon key is present (not yet authed)
+  const method = (opts.method||"GET").toUpperCase();
   const token = sbAuthToken();
-  const isAnonOnly = token === FCC_CONFIG.supabaseKey;
-  const authRequired = /^(fcc_projects|fcc_users|fcc_org_members)/.test(path);
-  if(isAnonOnly && authRequired && (opts.method || "GET") !== "GET") {
-    throw new Error("Not authenticated — request skipped");
+  const isAnonOnly = !token || token === FCC_CONFIG.supabaseKey;
+  if(isAnonOnly && method !== "GET") {
+    console.info("[Mradi] sbFetch skipped (not authenticated):", method, path);
+    return null;
   }
   const res = await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/${path}`, {
     headers: {
@@ -7791,15 +7703,15 @@ const sbFetch = async (path, opts={}, _retry=false) => {
   });
   if(!res.ok) {
     const txt = await res.text();
+    // Silently skip infinite recursion RLS errors
+    if(txt.includes("42P17") || txt.includes("infinite recursion")) {
+      console.warn("[Mradi] RLS recursion on fcc_org_members — fix policy in Supabase dashboard");
+      return null;
+    }
     // Auto-refresh on JWT expired — try once
     if(!_retry && (txt.includes("JWT expired") || txt.includes("PGRST303"))) {
       const newToken = await sbRefreshSession();
       if(newToken) return sbFetch(path, opts, true);
-    }
-    // Suppress infinite-recursion RLS errors from crashing the app
-    if(txt.includes("42P17") || txt.includes("infinite recursion")) {
-      console.warn("[Mradi] Supabase RLS infinite recursion on:", path, "— skipping. Fix the fcc_org_members policy in your Supabase dashboard.");
-      throw new Error("RLS_RECURSION:" + txt);
     }
     throw new Error(txt);
   }
@@ -7809,8 +7721,6 @@ const sbFetch = async (path, opts={}, _retry=false) => {
 // Upsert a row in fcc_users for analytics (non-blocking)
 const sbTrackUser = async (user) => {
   if(!sbReady() || !user?.id || user.id.startsWith("local-") || user.id.startsWith("guest-")) return;
-  // Only fire when we have a real JWT — avoids 401 noise when user isn't logged in yet
-  if(sbAuthToken() === FCC_CONFIG.supabaseKey) return;
   try {
     await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/fcc_users`, {
       method: "POST",
@@ -8000,10 +7910,9 @@ const sbSaveProject = async (userId, project) => {
     // Notify any sync banner listeners
     window.dispatchEvent(new CustomEvent("mradi_sync_ok", {detail:{id:project.id}}));
   }catch(e){
-    // If the failure is the RLS recursion bug, don't queue for sync — it will always fail
-    // until the Supabase policy is fixed. Just write locally and warn once.
-    if(e.message?.includes("RLS_RECURSION") || e.message?.includes("42P17") || e.message?.includes("infinite recursion")){
-      console.warn("[Mradi] Save local only — Supabase fcc_org_members RLS policy has infinite recursion. Fix in Supabase dashboard.");
+    // Don't enqueue saves that fail due to RLS recursion — they'd never succeed
+    if(e.message && (e.message.includes("42P17") || e.message.includes("infinite recursion"))) {
+      console.warn("[Mradi] Save skipped (RLS recursion) — fix fcc_org_members policy in Supabase");
       writeLocalCache();
       return;
     }
@@ -8036,10 +7945,8 @@ if(typeof window !== "undefined"){
 //    Called on org create + org join. Best-effort; silent on failure.
 const sbSyncOrgMember = async (userId, orgId, role) => {
   if(!sbReady() || !userId || !orgId || String(userId).startsWith("guest-") || String(userId).startsWith("local-")) return;
-  // Skip if not authenticated (token is just the anon key)
-  if(sbAuthToken() === FCC_CONFIG.supabaseKey) return;
   try{
-    const res = await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/fcc_org_members`, {
+    await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/fcc_org_members`, {
       method:"POST",
       headers:{
         "apikey":        FCC_CONFIG.supabaseKey,
@@ -8049,19 +7956,7 @@ const sbSyncOrgMember = async (userId, orgId, role) => {
       },
       body: JSON.stringify({ org_id: orgId, user_id: userId, role: role||"member" })
     });
-    if(!res.ok){
-      const txt = await res.text().catch(()=>"");
-      if(txt.includes("42P17") || txt.includes("infinite recursion")){
-        // ⚠️ Your fcc_org_members RLS policy has infinite recursion.
-        // Fix in Supabase dashboard: replace the SELECT policy with a
-        // SECURITY DEFINER function that doesn't re-query the same table.
-        console.warn("[Mradi] fcc_org_members RLS infinite recursion — membership sync skipped. Fix the Supabase RLS policy.");
-        return;
-      }
-    }
-  }catch(e){
-    if(!e.message?.includes("RLS_RECURSION")) console.warn("[Mradi] Org member sync skipped:", e.message);
-  }
+  }catch(e){ console.warn("[Mradi] Org member sync skipped:", e.message); }
 };
 
 /* ── 4a-2. SNAPSHOT SHORT-LINK HELPERS ───────────────────────────
@@ -11638,22 +11533,6 @@ function App(){
   const [online,setOnline]     = useState(()=>navigator.onLine);
   const [syncing,setSyncing]   = useState(false);
   const [lastSync,setLastSync] = useState(()=>load("ahp_lastSync")||null);
-  // ── Offline Sync Banner state — MUST stay above early-return gates (Rules of Hooks) ──
-  const [syncQueued, setSyncQueued] = React.useState(() => {
-    try{ return JSON.parse(localStorage.getItem("mradi_sync_queue")||"[]").length > 0; }catch{ return false; }
-  });
-  React.useEffect(()=>{
-    const onQueued = () => setSyncQueued(true);
-    const onOk     = () => {
-      try{
-        const q = JSON.parse(localStorage.getItem("mradi_sync_queue")||"[]");
-        if(q.length === 0) setSyncQueued(false);
-      }catch{ setSyncQueued(false); }
-    };
-    window.addEventListener("mradi_sync_queued", onQueued);
-    window.addEventListener("mradi_sync_ok",     onOk);
-    return ()=>{ window.removeEventListener("mradi_sync_queued",onQueued); window.removeEventListener("mradi_sync_ok",onOk); };
-  }, []);
   const [showMobileMenu,setShowMobileMenu] = useState(false);
   const [navOpen,setNavOpen] = useState(false);
   const [sideNavCollapsed,setSideNavCollapsed] = useState(false);
@@ -12226,6 +12105,23 @@ function App(){
     {id:"risks",      label:"Risks & QA",icon:"⚠"},
   ];
 
+  // ── Offline Sync Banner ──────────────────────────────────────────
+  const [syncQueued, setSyncQueued] = React.useState(() => {
+    try{ return JSON.parse(localStorage.getItem("mradi_sync_queue")||"[]").length > 0; }catch{ return false; }
+  });
+  React.useEffect(()=>{
+    const onQueued = () => setSyncQueued(true);
+    const onOk     = () => {
+      try{
+        const q = JSON.parse(localStorage.getItem("mradi_sync_queue")||"[]");
+        if(q.length === 0) setSyncQueued(false);
+      }catch{ setSyncQueued(false); }
+    };
+    window.addEventListener("mradi_sync_queued", onQueued);
+    window.addEventListener("mradi_sync_ok",     onOk);
+    return ()=>{ window.removeEventListener("mradi_sync_queued",onQueued); window.removeEventListener("mradi_sync_ok",onOk); };
+  }, []);
+
   // ── Gate 1: Auth (Login / Sign Up) ──
   // Gate 1: Landing page (shown before auth on first visit)
   if(showLanding){
@@ -12250,7 +12146,7 @@ function App(){
     />;
   }
 
-  // ── Offline Sync Banner ──────────────────────────────────────────
+
   const OfflineSyncBanner = syncQueued ? (
     <div style={{background:"#744210",color:"#FEFCBF",padding:"6px 16px",display:"flex",alignItems:"center",gap:"8px",fontSize:"12px",fontFamily:"'JetBrains Mono',monospace"}}>
       <span style={{animation:"pulse2 1.5s infinite",display:"inline-block",width:"7px",height:"7px",borderRadius:"50%",background:"#F6E05E",flexShrink:0}}/>
@@ -15158,7 +15054,7 @@ function WorkforceRegistryView({ workers, setWorkers, projectId, showToast }) {
   );
 }
 // ══════════════════════════════════════════════════════════
-const PAYSTACK_KEY = "pk_test_63e1fcfd734d117a23475494ea27c8499d1eb634";
+const PAYSTACK_KEY = "pk_live_3994cce5b5e23ba8b240cbb4dcff1f811f5a81b7";
 
 function PaymentsView({ site }) {
   const [form, setForm] = React.useState({ email: "", amount: "", name: "", description: "", phone: "" });
