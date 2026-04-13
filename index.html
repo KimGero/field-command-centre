@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, viewport-fit=cover"/>
-  <title>Kilimani Gardens Apartments — Mradi HQ Demo</title>
+  <title>Mradi HQ</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,300;1,400;1,500&family=Figtree:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,300;1,400&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet"/>
@@ -35,7 +35,7 @@
     const iconUrl = 'data:image/svg+xml,' + encodeURIComponent(iconSvg);
 
     const manifest = {
-      name: "Mradi HQ v2.0 — Field Command Centre",
+      name: "Mradi HQ — Field Command Centre",
       short_name: "Mradi HQ",
       description: "Site diary, GPS attendance, M-Pesa payments, materials & client reports — built for African contractors. v2.0",
       start_url: "./",
@@ -83,7 +83,7 @@
   <meta name="msapplication-config" content="none"/>
 
   <meta property="og:type"        content="website"/>
-  <meta property="og:title"       content="Mradi HQ v2.0 — Field Command Centre"/>
+  <meta property="og:title"       content="Mradi HQ — Field Command Centre"/>
   <meta property="og:description" content="GPS attendance, site diary, payments & reports. Built for African contractors."/>
   <meta property="og:image"       content="https://mradi.app/og-image.png"/>
   <meta name="twitter:card"       content="summary_large_image"/>
@@ -129,12 +129,95 @@
   <script>
   (function(){
     if(!('serviceWorker' in navigator)) return;
-    // Build an inline SW that caches this page + CDN assets
     if(!['https:','http:'].includes(location.protocol)){
       console.info('[Mradi SW] Skipped — open from Vercel/Netlify for offline support');
-    } else
-    try {
-      navigator.serviceWorker.register('/sw.js', {scope:'/'})
+      return;
+    }
+
+    // ── Inline Service Worker (Blob URL) ─────────────────────────────
+    // Embeds the SW directly in the HTML so it works from any single-file
+    // deploy without a separate /sw.js on the server.
+    // Strategy: cache-first for CDN scripts + this page; network-first for API.
+    const CACHE_NAME = 'mradi-v1';
+    const CDN_ASSETS = [
+      'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+      'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js',
+    ];
+
+    const swCode = `
+const CACHE = '${CACHE_NAME}';
+const CDN = ${JSON.stringify(CDN_ASSETS)};
+
+self.addEventListener('install', e => {
+  e.waitUntil(
+    caches.open(CACHE).then(c => {
+      // Cache this page itself
+      const pageReq = new Request(self.location.origin + '/', {mode:'no-cors'});
+      const cdnFetches = CDN.map(url =>
+        fetch(url, {mode:'no-cors'}).then(r => c.put(url, r)).catch(()=>{})
+      );
+      return Promise.all([...cdnFetches, c.add(pageReq).catch(()=>{})]);
+    })
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+    ).then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', e => {
+  const url = e.request.url;
+  // Cache-first for CDN assets
+  if(CDN.some(u => url === u) || url.includes('cdnjs.cloudflare.com') || url.includes('cdn.jsdelivr.net')) {
+    e.respondWith(
+      caches.match(e.request).then(cached => cached || fetch(e.request).then(resp => {
+        const clone = resp.clone();
+        caches.open(CACHE).then(c => c.put(e.request, clone));
+        return resp;
+      }))
+    );
+    return;
+  }
+  // Cache-first for same-origin navigation (the app shell)
+  if(e.request.mode === 'navigate') {
+    e.respondWith(
+      caches.match(e.request).then(cached => cached || fetch(e.request))
+    );
+    return;
+  }
+  // Network-first for Supabase API calls
+  if(url.includes('supabase.co')) {
+    e.respondWith(fetch(e.request).catch(() => new Response('', {status:503})));
+    return;
+  }
+  // Default: network with cache fallback
+  e.respondWith(
+    fetch(e.request).catch(() => caches.match(e.request))
+  );
+});
+
+// Background sync: flush Mradi sync queue when connectivity restored
+self.addEventListener('sync', e => {
+  if(e.tag === 'mradi-sync') {
+    e.waitUntil(
+      self.clients.matchAll().then(clients =>
+        clients.forEach(c => c.postMessage({type:'MRADI_FLUSH_SYNC'}))
+      )
+    );
+  }
+});
+`;
+
+    const registerSW = (url, opts) => {
+      navigator.serviceWorker.register(url, opts)
         .then(reg => {
           reg.addEventListener('updatefound', () => {
             const nw = reg.installing;
@@ -145,9 +228,27 @@
             });
           });
           window.__mradiSWRegistration = reg;
+          console.info('[Mradi SW] Registered via', url.startsWith('blob:') ? 'blob (inline)' : url);
         })
-        .catch(e => console.warn('[Mradi SW] Registration skipped:', e.message));
-    } catch(e) { /* SW not supported in this context */ }
+        .catch(e => console.warn('[Mradi SW] Registration failed:', e.message));
+    };
+
+    try {
+      // Try the real /sw.js first (production Vercel deploy with a real SW file)
+      // Fall back to inline blob SW if /sw.js returns 404 or errors
+      fetch('/sw.js', {method:'HEAD'}).then(r => {
+        if(r.ok) {
+          registerSW('/sw.js', {scope:'/'});
+        } else {
+          throw new Error('sw.js not found (status ' + r.status + ')');
+        }
+      }).catch(() => {
+        // Inline fallback: register a blob-URL SW
+        const blob = new Blob([swCode], {type:'application/javascript'});
+        const blobUrl = URL.createObjectURL(blob);
+        registerSW(blobUrl, {});
+      });
+    } catch(e) { console.warn('[Mradi SW] SW setup error:', e.message); }
 
     // ── Capture beforeinstallprompt for custom install button ──
     window.__pwaInstallPrompt = null;
@@ -2757,11 +2858,11 @@ function LandingPage({theme, setTheme, largeText, setLargeText, onEnter}){
           Built for African Contractors
         </div>
         <h1 className="lp-h1">
-          Run Your Site<br/>
-          Like a <span className="lp-accent">General</span>
+          Mradi wako<br/>
+          Mkononi <span className="lp-accent">Mwako</span>
         </h1>
         <p className="lp-sub">
-          Mradi HQ is the field command centre Kenyan contractors actually use —
+          Mradi HQ is the field command centre designed for Kenyan contractors —
           site diary, payments, attendance, materials, and client reports. All from your phone.
         </p>
         <div className="lp-actions">
@@ -2873,7 +2974,7 @@ function LandingPage({theme, setTheme, largeText, setLargeText, onEnter}){
             <div className="lp-quote">
               <div className="lp-quote-mark">"</div>
               <p className="lp-quote-text">
-                "I used to spend every Sunday writing the weekly report. Now I press one button and it generates the PDF and WhatsApp link automatically. My consultant calls it professional."
+                "I used to spend every Sunday writing the weekly report. Now I press one button and it generates the PDF and WhatsApp link automatically. My consultant calls it savvy."
               </p>
               <div className="lp-quote-author">
                 <div className="lp-quote-avatar">JM</div>
@@ -5185,13 +5286,26 @@ function DiaryView({diaries,setDiaries,team,workers,currentUserId,site}){
     const results = await Promise.all(Array.from(files).map(async file => {
       const cloudUrl = await sbUploadPhoto(file, userId);
       if(cloudUrl) return { url:cloudUrl, src:cloudUrl, caption:"", ts:new Date().toISOString(), _cloud:true };
+      // FIX Bug 5: Check storage quota before storing as base64 in localStorage.
+      // A single 12MP photo encodes to ~5MB which can destroy the entire budget on iOS Safari.
+      try {
+        if(navigator.storage && navigator.storage.estimate) {
+          const {quota, usage} = await navigator.storage.estimate();
+          const available = quota - usage;
+          const estimatedSize = file.size * 1.4; // base64 overhead ~1.37x
+          if(available < estimatedSize + 512*1024) { // keep 512KB headroom
+            showToast('⚠ Storage almost full — photo not saved locally. Connect to cloud to upload.', 'warn');
+            return null;
+          }
+        }
+      } catch {}
       return new Promise(res => {
         const reader = new FileReader();
         reader.onload = ev => res({ src:ev.target.result, caption:"", ts:new Date().toISOString() });
         reader.readAsDataURL(file);
       });
     }));
-    setForm(f=>({...f, photos:[...(f.photos||[]), ...results]}));
+    setForm(f=>({...f, photos:[...(f.photos||[]), ...results.filter(Boolean)]}));
     setUploading(false);
   };
 
@@ -7485,7 +7599,8 @@ async function verifyPlanWithServer() {
       const uid2 = sess2?.user?.id;
       const cacheKey = uid2 ? "mradi_plan_cache_"+uid2 : "mradi_plan_cache";
       const c = JSON.parse(localStorage.getItem(cacheKey)||"{}");
-      if(c.plan && Date.now()-c.cachedAt < 7200000) { _serverPlanState = c; _planVerified = true; }
+      // FIX Bug 4: 24h TTL (86400000ms) — paying users shouldn't lose features after 2h offline
+      if(c.plan && Date.now()-c.cachedAt < 86400000) { _serverPlanState = c; _planVerified = true; }
     } catch{}
   }
 }
@@ -8081,6 +8196,22 @@ const flushSyncQueue = async () => {
   try{
     const q = JSON.parse(localStorage.getItem("mradi_sync_queue")||"[]");
     if(!q.length) return;
+    // FIX Bug 7: Proactively refresh the Supabase session before replaying the
+    // queue. If the user was offline for >1h the JWT may be expired and each
+    // sbSaveProject call would fail-and-re-queue silently.
+    try {
+      const sb = getSupabaseClient();
+      if(sb) {
+        const { data } = await sb.auth.refreshSession();
+        if(data?.session?.access_token) {
+          const stored = JSON.parse(localStorage.getItem("fcc_user")||"{}");
+          stored.access_token = data.session.access_token;
+          stored.refresh_token = data.session.refresh_token || stored.refresh_token;
+          localStorage.setItem("fcc_user", JSON.stringify(stored));
+        }
+      }
+    } catch(refreshErr) { console.warn("[Mradi] Pre-flush token refresh failed:", refreshErr?.message); }
+
     for(const entry of q){
       try{ await sbSaveProject(entry.userId, entry.project); }catch{}
     }
@@ -9435,9 +9566,10 @@ function AuthScreen({ onDone }) {
   const [demoLoading, setDemoLoading] = useState(false);
   const [error,    setError]    = useState("");
   const [info,     setInfo]     = useState("");
-  const [showPass, setShowPass] = useState(false);
+  const [showPass,    setShowPass]    = useState(false);
+  const [odpcConsent, setOdpcConsent] = useState(false);
 
-  const clear = () => { setError(""); setInfo(""); };
+  const clear = () => { setError(""); setInfo(""); setOdpcConsent(false); };
 
   // ── Demo account — hardcoded credentials that always work ────────────────────
   const DEMO_EMAIL    = "demo@mradihq.app";
@@ -9517,7 +9649,7 @@ function AuthScreen({ onDone }) {
       const profile = saveLocalProfile({
         id: user.id, name: name.trim(),
         email: email.trim().toLowerCase(), org: org.trim(),
-        access_token: user.access_token, isGuest: false
+        access_token: user.access_token, isGuest: false, isDemo: false
       });
       sbTrackUser(profile);
       setInfo("✓ Account created! Check your email to confirm, then sign in.");
@@ -9760,9 +9892,40 @@ function AuthScreen({ onDone }) {
           </>
         )}
 
+        {/* ODPC Data Consent — signup only */}
+        {mode==="signup" && (
+          <div style={{display:"flex",alignItems:"flex-start",gap:"10px",padding:"12px",background:"var(--bg)",borderRadius:"8px",border:`1px solid ${odpcConsent?"var(--accent)":"var(--border)"}`,marginBottom:"12px",cursor:"pointer"}}
+            onClick={()=>setOdpcConsent(v=>!v)}>
+            <div style={{
+              width:"18px",height:"18px",borderRadius:"4px",flexShrink:0,marginTop:"1px",
+              border:`2px solid ${odpcConsent?"var(--accent)":"var(--text3)"}`,
+              background:odpcConsent?"var(--accent)":"transparent",
+              display:"flex",alignItems:"center",justifyContent:"center",
+              transition:"all 0.15s"
+            }}>
+              {odpcConsent && <span style={{color:"#fff",fontSize:"12px",fontWeight:"900",lineHeight:1}}>✓</span>}
+            </div>
+            <p style={{margin:0,fontSize:"12px",color:"var(--text3)",fontFamily:"'Figtree',sans-serif",lineHeight:1.5,userSelect:"none"}}>
+              I agree to the Mradi HQ{" "}
+              <a href="https://mradihq.vercel.app/privacy" target="_blank" rel="noopener noreferrer"
+                onClick={e=>e.stopPropagation()}
+                style={{color:"var(--accent)",fontWeight:"700",textDecoration:"underline"}}>
+                Privacy Policy
+              </a>
+              {" "}and consent to my personal data being processed in accordance with the{" "}
+              <a href="https://www.odpc.go.ke" target="_blank" rel="noopener noreferrer"
+                onClick={e=>e.stopPropagation()}
+                style={{color:"var(--accent)",fontWeight:"700",textDecoration:"underline"}}>
+                Kenya Data Protection Act 2019
+              </a>
+              {" "}(administered by the ODPC).
+            </p>
+          </div>
+        )}
+
         {/* Primary CTA */}
-        <button className="btn-primary" style={{width:"100%",padding:"13px",fontSize:"14px",marginTop:"4px",opacity:loading?"0.6":"1"}}
-          onClick={submit} disabled={loading}>
+        <button className="btn-primary" style={{width:"100%",padding:"13px",fontSize:"14px",marginTop:"4px",opacity:(loading||(mode==="signup"&&!odpcConsent))?"0.5":"1"}}
+          onClick={submit} disabled={loading||(mode==="signup"&&!odpcConsent)}>
           {loading ? "⟳ Please wait…" : mode==="login" ? "Sign In →" : mode==="signup" ? "Start 14-Day Free Trial →" : "Send Reset Link →"}
         </button>
 
@@ -9798,7 +9961,7 @@ function AuthScreen({ onDone }) {
       const profile = saveLocalProfile({
         id: user.id, name: user.name || email.split("@")[0],
         email: user.email || email.trim().toLowerCase(),
-        org: user.org || "", access_token: user.access_token, isGuest: false
+        org: user.org || "", access_token: user.access_token, isGuest: false, isDemo: false
       });
       sbTrackUser(profile);  // analytics ping
       onDone(profile);
@@ -9810,13 +9973,14 @@ function AuthScreen({ onDone }) {
     if(!name.trim()) { setError("Enter your full name."); return; }
     if(!email.trim() || !/\S+@\S+\.\S+/.test(email)) { setError("Enter a valid email address."); return; }
     if(password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if(!odpcConsent) { setError("You must agree to the Privacy Policy and ODPC data consent before continuing."); return; }
     setLoading(true); clear();
     try {
       const { user } = await sbSignup(name.trim(), email.trim().toLowerCase(), password);
       const profile = saveLocalProfile({
         id: user.id, name: name.trim(),
         email: email.trim().toLowerCase(), org: org.trim(),
-        access_token: user.access_token, isGuest: false
+        access_token: user.access_token, isGuest: false, isDemo: false
       });
       sbTrackUser(profile);
       setInfo("✓ Account created! Check your email to confirm, then sign in.");
@@ -11461,8 +11625,9 @@ function App(){
     setShowAuth(false);
     persist("ahp_seenApp", true);
     setShowLanding(false);
-    // Demo and guest go straight to app — no org setup
-    if(p?.isDemo || p?.isGuest) return;
+    // Demo and guest (anonymous trial) go straight to app — no org setup
+    // Note: signed-up users who were previously in demo are now real (isDemo=false after login)
+    if(p?.isDemo || (p?.isGuest && !p?.email)) return;
     // Gate 1.5: show org setup if user has no org yet
     if(!p?.isGuest && !getOrg()) {
       const joinCode = window.__FCC_JOIN_CODE__ || null;
@@ -11741,6 +11906,35 @@ function App(){
               headers:{ "Prefer":"resolution=merge-duplicates" },
               body: JSON.stringify({ id:p.id, owner_id:localProfile?.id, data:p, updated_at:ts })
             }).catch(()=>{});
+          }
+          // FIX Bug 3: Sync attendance and daily register records that were captured offline
+          const attKeys = Object.keys(localStorage).filter(k => k.startsWith('mradi_attendance_'));
+          for(const key of attKeys){
+            try{
+              const projId = key.replace('mradi_attendance_', '');
+              const records = JSON.parse(localStorage.getItem(key)||'[]');
+              if(records.length){
+                await sbFetch(`attendance?project_id=eq.${projId}`, {
+                  method:'POST',
+                  headers:{'Prefer':'resolution=merge-duplicates'},
+                  body: JSON.stringify(records)
+                }).catch(()=>{});
+              }
+            }catch{}
+          }
+          const drKeys = Object.keys(localStorage).filter(k => k.startsWith('mradi_dailyreg_'));
+          for(const key of drKeys){
+            try{
+              const projId = key.replace('mradi_dailyreg_', '');
+              const records = JSON.parse(localStorage.getItem(key)||'[]');
+              if(records.length){
+                await sbFetch(`daily_register?project_id=eq.${projId}`, {
+                  method:'POST',
+                  headers:{'Prefer':'resolution=merge-duplicates'},
+                  body: JSON.stringify(records)
+                }).catch(()=>{});
+              }
+            }catch{}
           }
         }catch{}
         setLastSync(ts);persist("ahp_lastSync",ts);setSyncing(false);
@@ -12447,8 +12641,7 @@ function App(){
             <span style={{fontFamily:"'Figtree',sans-serif",fontSize:"15px",fontWeight:"700",fontWeight:"800",color:"#e74c3c",flexShrink:0}}>🔒 SUBSCRIPTION LAPSED</span>
             <span style={{fontSize:"14px",color:"var(--text2)",flex:1}}>
               Your <strong>{planLabel}</strong> subscription expired.{" "}
-              You're on <strong>Free features only</strong> — GPS, reports, timeline & payments are locked.
-              Renew to restore full access instantly.
+              Core project editing remains available. GPS attendance, photo timeline, reports & payments require an active subscription.
             </span>
             <button onClick={()=>setShowPlanPayment(true)}
               style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:"4px",padding:"5px 14px",fontFamily:"'Figtree',sans-serif",fontSize:"15px",fontWeight:"700",fontWeight:"800",cursor:"pointer",flexShrink:0}}>
@@ -12479,8 +12672,8 @@ function App(){
           <div className="banner-pop-fade" style={{background:"rgba(231,76,60,0.1)",borderBottom:"2px solid rgba(231,76,60,0.35)",padding:"7px 16px",display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap"}}>
             <span style={{fontFamily:"'Figtree',sans-serif",fontSize:"15px",fontWeight:"700",fontWeight:"800",color:"#e74c3c",flexShrink:0}}>🔒 TRIAL ENDED</span>
             <span style={{fontSize:"14px",color:"var(--text2)",flex:1}}>
-              Your 14-day trial has ended. GPS attendance, photo timeline, reports & payments are now locked.
-              Subscribe monthly to restore full access.
+              Your 14-day trial has ended. Project editing, diary and materials remain free forever.
+              Subscribe to unlock GPS attendance, photo timeline, auto-reports & payment tracking.
             </span>
             <button onClick={()=>setShowPlanPayment(true)}
               style={{background:"#e74c3c",color:"#fff",border:"none",borderRadius:"4px",padding:"5px 14px",fontFamily:"'Figtree',sans-serif",fontSize:"15px",fontWeight:"700",fontWeight:"800",cursor:"pointer",flexShrink:0}}>
@@ -15589,22 +15782,22 @@ function PaymentsView({ site }) {
 
 // ══════════════════════════════════════════════════════════════════
 // MRADI ADMIN PANEL — Founder-grade SaaS control room
-// Access: triple-click logo | ?admin=true | localStorage.mradi_admin=true
-// Secret key: "admin123" (typed anywhere when panel is in "key" mode)
+// Access: triple-click logo (typed secret required)
+// FIX Bug 6: localStorage bypass and ?admin=true URL param REMOVED.
+// Admin gate is now session-only (in-memory flag cleared on page reload).
+// TODO: replace in-memory flag with a server-side Supabase RLS admin role check.
 // ══════════════════════════════════════════════════════════════════
 
 // ── Admin-mode gate helpers ──────────────────────────────────────
-const isAdminMode = () => {
-  try { return localStorage.getItem("mradi_admin") === "true"; } catch { return false; }
-};
-const setAdminMode = (v) => {
-  try { localStorage.setItem("mradi_admin", v ? "true" : "false"); } catch {}
-};
-// Check URL param on load
+// In-memory only — never persisted to localStorage
+let _adminModeSession = false;
+const isAdminMode = () => _adminModeSession;
+const setAdminMode = (v) => { _adminModeSession = !!v; };
+// FIX Bug 6: ?admin=true URL param bypass removed — no auto-activation from URL
 if (typeof window !== "undefined") {
   try {
-    const _ap = new URLSearchParams(window.location.search).get("admin");
-    if (_ap === "true") { setAdminMode(true); window.history.replaceState({}, "", window.location.pathname); }
+    // Clean up any legacy mradi_admin key that may exist in localStorage from older versions
+    localStorage.removeItem("mradi_admin");
   } catch {}
 }
 
