@@ -93,15 +93,7 @@
 
   <style>
 
-    /* ── DEMO LOCK OVERLAY ── */
-    .demo-locked { position:relative; cursor:not-allowed !important; }
-    .demo-locked::after {
-      content:'🔒 Demo';
-      position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-      background:rgba(0,0,0,0.45); color:#fff; font-size:10px; font-weight:800;
-      font-family:'JetBrains Mono',monospace; letter-spacing:0.08em; border-radius:inherit;
-      pointer-events:none;
-    }
+    /* demo-locked styles removed — live mode */
     .pwa-titlebar { display: none; }
     @media (display-mode: window-controls-overlay) {
       body { padding-top: env(titlebar-area-height, 0); }
@@ -7636,6 +7628,101 @@ const saveLocalProfile = (updates) => {
   }catch{ return getLocalProfile(); }
 };
 
+/* ── 3b. GAMIFICATION ENGINE ────────────────────────────────────
+   XP, streaks, levels, badges — all stored in localStorage.
+   Call gami.award(action) anywhere to credit points.
+   ─────────────────────────────────────────────────────────────── */
+const GAMI_KEY = "mradi_gamification";
+const GAMI_XP = {
+  app_open:      10,   // daily bonus for opening the app
+  diary_entry:   50,   // new diary entry logged
+  attendance:    20,   // worker attendance recorded
+  material_add:  30,   // new material added
+  risk_log:      40,   // risk or issue logged
+  task_complete: 100,  // phase/task marked complete
+  report_gen:    75,   // daily report generated
+};
+const GAMI_LEVELS = [
+  { min:0,     label:"Fundis Apprentice",  icon:"🧱" },
+  { min:200,   label:"Site Foreman",        icon:"👷" },
+  { min:500,   label:"Project Supervisor",  icon:"📋" },
+  { min:1000,  label:"Senior PM",           icon:"🏗" },
+  { min:2000,  label:"Construction Director",icon:"⌘" },
+  { min:4000,  label:"Master Builder",      icon:"🏆" },
+];
+const GAMI_BADGES = [
+  { id:"first_open",    icon:"🚀", label:"First Day",        desc:"Opened Mradi HQ for the first time" },
+  { id:"first_diary",   icon:"📝", label:"First Log",        desc:"Logged your first site diary entry" },
+  { id:"streak_3",      icon:"🔥", label:"On a Roll",        desc:"3-day login streak" },
+  { id:"streak_7",      icon:"🔥", label:"Week Warrior",     desc:"7-day login streak" },
+  { id:"streak_30",     icon:"💎", label:"Site Legend",      desc:"30-day login streak" },
+  { id:"diary_10",      icon:"📚", label:"Diary Pro",        desc:"10 diary entries logged" },
+  { id:"diary_30",      icon:"📖", label:"Diary Master",     desc:"30 diary entries logged" },
+  { id:"attendance_20", icon:"👥", label:"Crew Commander",   desc:"Recorded attendance 20 times" },
+  { id:"risk_5",        icon:"⚠️", label:"Risk Watcher",     desc:"Logged 5 risks or issues" },
+  { id:"report_1",      icon:"📊", label:"Report Ready",     desc:"Generated your first daily report" },
+  { id:"level_2",       icon:"⭐", label:"Levelled Up",      desc:"Reached Site Foreman" },
+  { id:"level_5",       icon:"🌟", label:"Elite Builder",   desc:"Reached Senior PM" },
+];
+const getGami = () => {
+  try {
+    const g = JSON.parse(localStorage.getItem(GAMI_KEY));
+    return g && g.xp !== undefined ? g : { xp:0, streak:0, lastDate:"", badges:[], actionCounts:{}, dailyActions:[] };
+  } catch { return { xp:0, streak:0, lastDate:"", badges:[], actionCounts:{}, dailyActions:[] }; }
+};
+const saveGami = (g) => { try{ localStorage.setItem(GAMI_KEY, JSON.stringify(g)); }catch{} };
+const gamiLevel = (xp) => {
+  let lv = GAMI_LEVELS[0];
+  for(const l of GAMI_LEVELS) { if(xp >= l.min) lv = l; }
+  const idx = GAMI_LEVELS.indexOf(lv);
+  const next = GAMI_LEVELS[idx+1];
+  const pct = next ? Math.round(((xp - lv.min) / (next.min - lv.min)) * 100) : 100;
+  return { ...lv, next, pct, idx };
+};
+const awardGami = (action, multiplier=1) => {
+  const g = getGami();
+  const earned = (GAMI_XP[action] || 10) * multiplier;
+  const today = new Date().toISOString().slice(0,10);
+
+  // Streak logic
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0,10);
+  if(g.lastDate === yesterday) { g.streak = (g.streak||0) + 1; }
+  else if(g.lastDate !== today) { g.streak = 1; }
+  g.lastDate = today;
+
+  // XP
+  g.xp = (g.xp||0) + earned;
+
+  // Action counts
+  g.actionCounts = g.actionCounts || {};
+  g.actionCounts[action] = (g.actionCounts[action]||0) + multiplier;
+
+  // Daily actions (dedupe per day)
+  g.dailyActions = g.dailyActions || [];
+  if(!g.dailyActions.includes(today+":"+action)) g.dailyActions.push(today+":"+action);
+  // Keep only last 60 days of entries
+  if(g.dailyActions.length > 200) g.dailyActions = g.dailyActions.slice(-200);
+
+  // Badge checks
+  g.badges = g.badges || [];
+  const addBadge = (id) => { if(!g.badges.includes(id)) g.badges.push(id); };
+  if(action==="app_open")     addBadge("first_open");
+  if(action==="diary_entry")  addBadge("first_diary");
+  if(g.streak>=3)             addBadge("streak_3");
+  if(g.streak>=7)             addBadge("streak_7");
+  if(g.streak>=30)            addBadge("streak_30");
+  if((g.actionCounts.diary_entry||0)>=10)    addBadge("diary_10");
+  if((g.actionCounts.diary_entry||0)>=30)    addBadge("diary_30");
+  if((g.actionCounts.attendance||0)>=20)     addBadge("attendance_20");
+  if((g.actionCounts.risk_log||0)>=5)        addBadge("risk_5");
+  if(action==="report_gen")   addBadge("report_1");
+  if(g.xp>=200)               addBadge("level_2");
+  if(g.xp>=1000)              addBadge("level_5");
+
+  saveGami(g);
+  return { earned, g };
+};
+
 // Pricing tiers — match landing page
 const FCC_PLANS = {
   free:    { id:"free",    label:"Solo Contractor", price:0,    projectLimit:1,  members:2,   color:"#718096", icon:"🧱" },
@@ -9587,23 +9674,23 @@ function AuthScreen({ onDone }) {
             id: user.id||("demo-"+Date.now()),
             name: DEMO_NAME, email: DEMO_EMAIL,
             org: "Mradi HQ Demo", access_token: user.access_token||"",
-            isGuest: false, isDemo: true,
+            isGuest: false, isDemo: false,
           });
           setDemoLoading(false);
           onDone(profile);
           return;
         }catch(e){
-          // Demo account not in Supabase — fall through to local demo mode
+          // Demo account not in Supabase — fall through to local guest mode
         }
       }
     }catch{}
-    // Local demo mode — no Supabase needed
+    // Local guest mode — no Supabase needed
     const demoId = "demo-" + Math.random().toString(36).slice(2, 10);
     const trialStart = Date.now();
     try{ localStorage.setItem("mradi_trial_start", String(trialStart)); }catch{}
     const profile = saveLocalProfile({
       id: demoId, name: DEMO_NAME, email: DEMO_EMAIL,
-      org: "Mradi HQ Demo", isGuest: false, isDemo: true,
+      org: "Mradi HQ", isGuest: false, isDemo: false,
       trialStart,
     });
     setDemoLoading(false);
@@ -9652,7 +9739,10 @@ function AuthScreen({ onDone }) {
         access_token: user.access_token, isGuest: false, isDemo: false
       });
       sbTrackUser(profile);
-      setInfo("✓ Account created! Check your email to confirm, then sign in.");
+      // Immediately clear demo/guest mode in parent — user now has a real account.
+      // They still need to confirm email before full cloud sync, but editing is unlocked.
+      onDone(profile);
+      setInfo("✓ Account created! Check your email to confirm your address.");
       setMode("login");
     } catch(e) { setError(e.message || "Sign-up failed — try again."); }
     setLoading(false);
@@ -9983,7 +10073,9 @@ function AuthScreen({ onDone }) {
         access_token: user.access_token, isGuest: false, isDemo: false
       });
       sbTrackUser(profile);
-      setInfo("✓ Account created! Check your email to confirm, then sign in.");
+      // Clear demo/guest mode in parent immediately — editing is unlocked from this point.
+      onDone(profile);
+      setInfo("✓ Account created! Check your email to confirm your address.");
       setMode("login");
     } catch(e) { setError(e.message || "Sign-up failed — try again."); }
     setLoading(false);
@@ -11593,6 +11685,7 @@ function App(){
   const [showOrgPanel, setShowOrgPanel] = useState(false);   // AccountPanel (profile/addons)
   const [showOrgMgmt,  setShowOrgMgmt]  = useState(false);   // OrgPanel (team/invite/admin)
   const [showOrgSetup, setShowOrgSetup] = useState(false);   // OrgSetupScreen (first-time)
+  const [showBadges,   setShowBadges]   = useState(false);   // Badges & achievements drawer
   const [orgSetupJoinCode, setOrgSetupJoinCode] = useState(null); // prefill code from ?join=
   const [showPremium, setShowPremium] = useState(null); // addonId or null
   const [addons, setAddons] = useState(getAddons);
@@ -11625,9 +11718,9 @@ function App(){
     setShowAuth(false);
     persist("ahp_seenApp", true);
     setShowLanding(false);
-    // Demo and guest (anonymous trial) go straight to app — no org setup
-    // Note: signed-up users who were previously in demo are now real (isDemo=false after login)
-    if(p?.isDemo || (p?.isGuest && !p?.email)) return;
+    // Guest (anonymous trial) goes straight to app — no org setup
+    // Note: signed-up users are now real (isDemo=false after login)
+    if(p?.isGuest && !p?.email) return;
     // Gate 1.5: show org setup if user has no org yet
     if(!p?.isGuest && !getOrg()) {
       const joinCode = window.__FCC_JOIN_CODE__ || null;
@@ -11666,9 +11759,9 @@ function App(){
     const params = new URLSearchParams(window.location.search);
     if(params.has("landing") || params.has("home")) return true;
     const _p = getLocalProfile();
-    // Only treat as "logged in" if they have a real email account — guests/demo always see landing
-    const hasRealAccount = _p?.email && !_p?.isGuest && !_p?.isDemo;
-    if(!hasRealAccount) return true; // unauthenticated + guests + demo always see landing
+    // Only treat as "logged in" if they have a real email account — guests always see landing
+    const hasRealAccount = _p?.email && !_p?.isGuest;
+    if(!hasRealAccount) return true; // unauthenticated + guests always see landing
     return load("ahp_seenApp")!==true; // real account first-timers also see landing
   });
   const [projects,setProjects] = useState(()=>{
@@ -12123,7 +12216,68 @@ function App(){
   };
 
   useEffect(()=>{const t=setInterval(()=>setTime(new Date()),1000);return()=>clearInterval(t);},[]);
+
+  // ── Daily gamification: award XP on first open each day ───────────────
+  const [gamiState, setGamiState] = React.useState(()=>getGami());
+  React.useEffect(()=>{
+    if(!profile?.isDemo && !profile?.isGuest){
+      const today = new Date().toISOString().slice(0,10);
+      const g = getGami();
+      if(g.lastDate !== today){
+        const {g:updated} = awardGami("app_open");
+        setGamiState({...updated});
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+  const refreshGami = () => setGamiState({...getGami()});
+
+  // ── AI Daily Brief state (hoisted — hooks cannot live in render IIFEs) ─
+  const [aiOpen,    setAiOpen]    = React.useState(false);
+  const [aiText,    setAiText]    = React.useState("");
+  const [aiLoading, setAiLoading] = React.useState(false);
+  const [aiError,   setAiError]   = React.useState("");
+
   const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
+
+  // ── AI Daily Brief — generate via Anthropic API ────────────────────────
+  const generateBrief = React.useCallback(async (snapData) => {
+    if(aiLoading) return;
+    setAiLoading(true); setAiError(""); setAiText("");
+    try {
+      const snap = snapData || {};
+      const prompt = `You are a Kenyan construction site AI assistant. Given this project snapshot, write a crisp, practical morning brief for the site manager. Be specific, use bullet points (max 5), end with one motivational line. Speak like a senior PM — direct, no fluff.
+
+Project: ${snap.project||"—"}${snap.location?` · ${snap.location}`:""}
+Overall progress: ${snap.progress||0}%${snap.daysLeft?` · ${snap.daysLeft} days to completion`:""}
+Workers on site today: ${snap.workers||0}
+Overdue tasks: ${snap.overdue||0}
+Open risks: ${snap.risks||0}
+Material alerts: ${snap.matAlerts||0}
+Active phases: ${(snap.phases||[]).filter(p=>p.status==="in-progress").map(p=>`${p.name} (${p.progress}%)`).join(", ")||"none"}
+Today's diary entries: ${(snap.todayDiary||[]).join("; ")||"none yet"}
+
+Write the morning brief now:`;
+
+      const res = await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          model:"claude-sonnet-4-20250514",
+          max_tokens:400,
+          messages:[{role:"user",content:prompt}]
+        })
+      });
+      const data = await res.json();
+      const text = data?.content?.filter(b=>b.type==="text").map(b=>b.text).join("").trim();
+      if(!text) throw new Error("Empty response");
+      setAiText(text);
+    } catch(e) {
+      setAiError("Could not generate brief — check your connection.");
+    }
+    setAiLoading(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiLoading]);
 
   // ── Request push notification permission on first meaningful interaction
   React.useEffect(()=>{
@@ -12356,10 +12510,19 @@ function App(){
     const {wpId,col}=inlineEdit;
     const val=overrideVal!==undefined?overrideVal:inlineEdit.val;
     const coerced=col==="progress"?Math.max(0,Math.min(100,Number(val))):val;
+    const prevWP=wps.find(w=>w.id===wpId);
     const newWPs=wps.map(w=>w.id===wpId?{...w,[col]:coerced}:w);
     saveProj({wps:newWPs});
     setInlineEdit(null);
-    showToast("✓ Saved");
+    // Award XP when a task is marked done or reaches 100%
+    const justDone=(col==="status"&&coerced==="done"&&prevWP?.status!=="done");
+    const justComplete=(col==="progress"&&coerced===100&&(prevWP?.progress||0)<100);
+    if(justDone||justComplete){
+      const {earned}=awardGami("task_complete"); refreshGami();
+      showToast(`✅ Task complete · +${earned} XP 🏗`);
+    } else {
+      showToast("✓ Saved");
+    }
   };
 
   const cancelInline=()=>setInlineEdit(null);
@@ -12508,30 +12671,11 @@ function App(){
     </div>
   ) : null;
 
-  // ── Demo / Guest / Trial banner (shown inline at top of app) ──
+  // ── Live mode: no demo banner ──
   const GuestBanner = (() => {
     const daysLeft = getTrialDaysLeft();
-    const isDemo   = profile?.isDemo;
-    const isGuest  = profile?.isGuest && !isDemo;
+    const isGuest  = profile?.isGuest;
     const urgent   = daysLeft <= 3;
-
-    if(isDemo) return (
-      <div style={{background:"linear-gradient(90deg,var(--accent)18,var(--accent)08)",borderBottom:"1px solid var(--accent)33",padding:"7px 16px",display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap"}}>
-        <div style={{display:"flex",alignItems:"center",gap:"7px",flexShrink:0}}>
-          <div style={{width:"7px",height:"7px",borderRadius:"50%",background:"var(--accent)",animation:"pulse2 2s infinite"}}/>
-          <span style={{fontFamily:"'Figtree',sans-serif",fontSize:"15px",fontWeight:"700",fontWeight:"800",color:"var(--accent)",textTransform:"uppercase",letterSpacing:"0.1em"}}>Demo Mode</span>
-        </div>
-        <span style={{fontSize:"14px",color:"var(--text3)",flex:1,minWidth:0}}>
-          Exploring <strong style={{color:"var(--text)"}}>Kilimani Gardens</strong> — view-only. Editing &amp; saving are disabled in demo. Sign up for full access.
-        </span>
-        <div style={{display:"flex",gap:"6px",alignItems:"center",flexShrink:0}}>
-          <button onClick={()=>setShowAuth(true)}
-            style={{background:"var(--accent)",color:"#fff",border:"none",borderRadius:"4px",padding:"4px 12px",fontFamily:"'Figtree',sans-serif",fontSize:"15px",fontWeight:"700",fontWeight:"800",cursor:"pointer",textTransform:"uppercase",letterSpacing:"0.08em",whiteSpace:"nowrap"}}>
-            Create Free Account →
-          </button>
-        </div>
-      </div>
-    );
 
     if(isGuest) return (
       <div style={{background: urgent?"rgba(231,76,60,0.1)":"var(--amber)10",borderBottom:`1px solid ${urgent?"rgba(231,76,60,0.4)":"var(--amber)44"}`,padding:"7px 16px",display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap"}}>
@@ -12558,12 +12702,9 @@ function App(){
     setShowPremium(addonId);
   };
 
-  // ── Demo guard — blocks writes in demo mode ──────────────────────────────────
-  const isDemoUser = !!profile?.isDemo;
-  const demoBlock = (fn, msg) => {
-    if(!isDemoUser){ fn(); return; }
-    showToast("🔒 Demo is view-only — sign up for full access");
-  };
+  // ── Demo guard — disabled in live mode ──────────────────────────────────────
+  const isDemoUser = false;
+  const demoBlock = (fn, msg) => { fn(); }; // always execute in live mode
 
   return(
     <div style={{minHeight:"100vh",background:"var(--bg)",fontFamily:"'Figtree',sans-serif",color:"var(--text)"}}>
@@ -12741,12 +12882,82 @@ function App(){
         />
       )}
 
-  {showPin&&<PinLock onUnlock={()=>{setShowPin(false);if(isDemoUser){showToast("🔒 Demo is view-only — sign up to edit projects");}else{setShowEdit(true);}}}/>}
-  {showEdit&&!isDemoUser&&<EditPanel data={proj} onSave={handleSave} onClose={()=>setShowEdit(false)}/>}
+  {showPin&&<PinLock onUnlock={()=>{setShowPin(false);setShowEdit(true);}}/>}
+  {showEdit&&<EditPanel data={proj} onSave={handleSave} onClose={()=>setShowEdit(false)}/>}
       {showIntegration&&<IntegrationHub proj={proj} onImport={handleImport} onClose={()=>setShowIntegration(false)} showToast={showToast}/>}
 
       {showOrgPanel&&<AccountPanel profile={profile} onClose={()=>setShowOrgPanel(false)} onProfileSaved={p=>setProfile(p)} showToast={showToast}/>}
       {showOrgMgmt&&<OrgPanel profile={profile} onClose={()=>setShowOrgMgmt(false)} showToast={showToast}/>}
+
+      {/* ── BADGES & ACHIEVEMENTS DRAWER ── */}
+      {showBadges&&(()=>{
+        const g = gamiState;
+        const lv = gamiLevel(g.xp||0);
+        const earned = g.badges||[];
+        return (
+          <div style={{position:"fixed",inset:0,zIndex:9800,display:"flex",alignItems:"flex-end",justifyContent:"center"}}
+            onClick={e=>{if(e.target===e.currentTarget)setShowBadges(false);}}>
+            <div style={{background:"var(--bg2,#0F0F1A)",borderRadius:"24px 24px 0 0",width:"100%",maxWidth:"520px",maxHeight:"85vh",overflow:"auto",padding:"0 0 calc(24px + env(safe-area-inset-bottom,0px))",boxShadow:"0 -8px 40px rgba(0,0,0,0.5)"}}>
+              {/* Handle */}
+              <div style={{display:"flex",justifyContent:"center",padding:"10px 0 4px"}}>
+                <div style={{width:"36px",height:"4px",borderRadius:"2px",background:"var(--border)"}}/>
+              </div>
+              {/* Header */}
+              <div style={{padding:"8px 20px 16px",borderBottom:"1px solid var(--border)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:"20px",fontWeight:"800",color:"var(--text)",letterSpacing:"-0.02em"}}>Achievements</div>
+                    <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"14px",color:"var(--text3)",marginTop:"2px"}}>{earned.length} of {GAMI_BADGES.length} unlocked</div>
+                  </div>
+                  <button onClick={()=>setShowBadges(false)} style={{background:"var(--border)",border:"none",borderRadius:"50%",width:"32px",height:"32px",cursor:"pointer",fontSize:"16px",color:"var(--text3)",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+                </div>
+                {/* Level + XP summary */}
+                <div style={{marginTop:"14px",padding:"12px 14px",borderRadius:"12px",background:"linear-gradient(135deg,var(--accent)15,var(--accent)05)",border:"1px solid var(--accent)25"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                      <span style={{fontSize:"22px"}}>{lv.icon}</span>
+                      <div>
+                        <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"15px",fontWeight:"800",color:"var(--text)"}}>{lv.label}</div>
+                        <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:"12px",color:"var(--accent)"}}>{(g.xp||0).toLocaleString()} XP · 🔥 {g.streak||0}-day streak</div>
+                      </div>
+                    </div>
+                    {lv.next&&<div style={{fontFamily:"'Figtree',sans-serif",fontSize:"12px",color:"var(--text3)",textAlign:"right"}}><div style={{fontWeight:"700",color:"var(--text)"}}>{lv.next.label}</div><div>{lv.next.min-(g.xp||0)} XP to go</div></div>}
+                  </div>
+                  <div style={{height:"6px",background:"var(--border)",borderRadius:"99px",overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${lv.pct}%`,background:"linear-gradient(90deg,var(--accent),var(--accent)bb)",borderRadius:"99px"}}/>
+                  </div>
+                </div>
+              </div>
+              {/* Badge grid */}
+              <div style={{padding:"16px 20px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
+                {GAMI_BADGES.map(b=>{
+                  const unlocked = earned.includes(b.id);
+                  return (
+                    <div key={b.id} style={{padding:"12px",borderRadius:"12px",border:`1px solid ${unlocked?"var(--accent)30":"var(--border)"}`,background:unlocked?"var(--accent)08":"var(--bg)",opacity:unlocked?1:0.5,transition:"all 0.2s"}}>
+                      <div style={{fontSize:"24px",marginBottom:"6px",filter:unlocked?"none":"grayscale(1)"}}>{b.icon}</div>
+                      <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"13px",fontWeight:"800",color:unlocked?"var(--text)":"var(--text3)",marginBottom:"3px"}}>{b.label}</div>
+                      <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"12px",color:"var(--text3)",lineHeight:1.4}}>{b.desc}</div>
+                      {unlocked&&<div style={{marginTop:"6px",fontFamily:"'JetBrains Mono',monospace",fontSize:"10px",fontWeight:"700",color:"var(--green)"}}>✓ UNLOCKED</div>}
+                    </div>
+                  );
+                })}
+              </div>
+              {/* XP cheatsheet */}
+              <div style={{padding:"0 20px 8px"}}>
+                <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"12px",fontWeight:"800",color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"10px"}}>Earn XP</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px"}}>
+                  {Object.entries(GAMI_XP).map(([action,xp])=>(
+                    <div key={action} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 10px",borderRadius:"8px",background:"var(--bg)"}}>
+                      <span style={{fontFamily:"'Figtree',sans-serif",fontSize:"12px",color:"var(--text3)",textTransform:"capitalize"}}>{action.replace(/_/g," ")}</span>
+                      <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:"12px",fontWeight:"700",color:"var(--accent)"}}>+{xp}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {showShareModal&&<ShareSnapshotModal proj={proj} diaries={diaries} materials={materials} provisions={provisions} onClose={()=>setShowShareModal(false)} showToast={showToast} currentUserId={profile?.id||null}/>}
       {showTeamRoom&&(
         <TeamRoomPanel
@@ -13476,7 +13687,183 @@ function App(){
         {view==="overview"&&(
           <div style={{animation:"fadeUp 0.2s ease"}}>
 
-            {/* ══ HERO — Project identity + trust signals ══ */}
+            {/* ══ MORNING BRIEFING — Daily summary + gamification ══ */}
+            {(()=>{
+              const hour = new Date().getHours();
+              const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+              const userName = profile?.name?.split(" ")[0] || "Boss";
+              const todayStr = new Date().toISOString().slice(0,10);
+              const todayDiary = diaries.filter(d=>d.date&&d.date.slice(0,10)===todayStr);
+              const workersActive = workers.filter(w=>(w.status||"active")==="active").length || workers.length;
+              const overdueWps = wps.filter(w=>w.status!=="done"&&w.dueDate&&w.dueDate<todayStr).length;
+              const matLow = materials.filter(m=>m.onSite!=null&&m.plannedConsumption!=null&&m.onSite<m.plannedConsumption*0.2).length;
+
+              // Gamification
+              const g = gamiState;
+              const lv = gamiLevel(g.xp||0);
+              const nextXp = lv.next ? lv.next.min : lv.min;
+              const curXp = g.xp || 0;
+              const pct = lv.pct;
+              const streak = g.streak || 0;
+              const recentBadges = (g.badges||[]).slice(-3).map(id=>GAMI_BADGES.find(b=>b.id===id)).filter(Boolean);
+
+              // Today's action checklist
+              const doneActions = g.dailyActions||[];
+              const diaryDone = doneActions.includes(todayStr+":diary_entry");
+              const attendDone = doneActions.includes(todayStr+":attendance");
+
+              // Contextual message
+              const msgs = [];
+              if(overdueWps>0) msgs.push(`⚠️ ${overdueWps} overdue task${overdueWps>1?"s":""}`);
+              if(matLow>0) msgs.push(`🧱 ${matLow} material${matLow>1?"s":""} low`);
+              if(openRisks>0) msgs.push(`🚨 ${openRisks} open risk${openRisks>1?"s":""}`);
+              if(msgs.length===0 && todayDiary.length>0) msgs.push("✓ Site diary logged today");
+              if(msgs.length===0) msgs.push("All good — have a productive day");
+
+              return (
+                <div className="card" style={{marginBottom:"14px",padding:"16px",background:"linear-gradient(135deg,var(--bg) 0%,var(--accent)07 100%)",border:"1px solid var(--accent)22",position:"relative",overflow:"hidden"}}>
+                  {/* Decorative stripe */}
+                  <div style={{position:"absolute",top:0,left:0,width:"3px",height:"100%",background:"linear-gradient(180deg,var(--accent),var(--accent)44)",borderRadius:"3px 0 0 3px"}}/>
+
+                  {/* Top row: greeting + streak */}
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"12px",paddingLeft:"8px"}}>
+                    <div>
+                      <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"13px",fontWeight:"700",color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"3px"}}>
+                        {new Date().toLocaleDateString("en-KE",{weekday:"long",day:"numeric",month:"long"})}
+                      </div>
+                      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:"clamp(17px,4vw,21px)",fontWeight:"800",color:"var(--text)",letterSpacing:"-0.02em"}}>
+                        {greeting}, {userName} 👋
+                      </div>
+                      <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"14px",color:"var(--text3)",marginTop:"4px",lineHeight:1.5}}>
+                        {msgs.join(" · ")}
+                      </div>
+                    </div>
+                    {/* Streak badge */}
+                    <div style={{textAlign:"center",flexShrink:0,paddingLeft:"12px"}}>
+                      <div style={{background:streak>=7?"linear-gradient(135deg,#FF5C00,#FF8C42)":"var(--accent)15",borderRadius:"12px",padding:"8px 12px",border:`1px solid ${streak>=7?"var(--accent)":"var(--accent)30"}`}}>
+                        <div style={{fontSize:"22px",lineHeight:1}}>{streak>=7?"🔥":streak>=3?"⚡":"📅"}</div>
+                        <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:"20px",fontWeight:"800",color:streak>=7?"#fff":"var(--accent)",lineHeight:1,marginTop:"2px"}}>{streak}</div>
+                        <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"10px",fontWeight:"700",color:streak>=7?"rgba(255,255,255,0.8)":"var(--text3)",textTransform:"uppercase",letterSpacing:"0.08em"}}>Day Streak</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* XP Level bar — tap to open achievements */}
+                  <div onClick={()=>setShowBadges(true)} style={{paddingLeft:"8px",marginBottom:"14px",cursor:"pointer"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"5px"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+                        <span style={{fontSize:"16px"}}>{lv.icon}</span>
+                        <span style={{fontFamily:"'Figtree',sans-serif",fontSize:"13px",fontWeight:"800",color:"var(--text)",letterSpacing:"0.02em"}}>{lv.label}</span>
+                      </div>
+                      <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:"12px",fontWeight:"700",color:"var(--accent)"}}>
+                        {curXp.toLocaleString()} XP{lv.next?` · ${lv.next.min-curXp} to ${lv.next.label}`:"· MAX"}
+                      </div>
+                    </div>
+                    <div style={{height:"6px",background:"var(--border)",borderRadius:"99px",overflow:"hidden"}}>
+                      <div style={{height:"100%",width:`${pct}%`,background:"linear-gradient(90deg,var(--accent),var(--accent)cc)",borderRadius:"99px",transition:"width 0.6s ease"}}/>
+                    </div>
+                  </div>
+
+                  {/* Today's action checklist */}
+                  <div style={{paddingLeft:"8px",marginBottom:recentBadges.length?"12px":"0"}}>
+                    <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"12px",fontWeight:"800",color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"7px"}}>Today's Mission</div>
+                    <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+                      {[
+                        {done:diaryDone,  icon:"📋", label:"Log Diary",  xp:50, action:()=>setView("diary")},
+                        {done:attendDone, icon:"👷", label:"Attendance", xp:20, action:()=>setView("team")},
+                        {done:todayDiary.length>0&&workersActive>0, icon:"📊", label:`${workersActive} Workers`, xp:0, action:()=>setView("team")},
+                      ].map((item,i)=>(
+                        <button key={i} onClick={item.action}
+                          style={{display:"flex",alignItems:"center",gap:"6px",padding:"6px 10px",borderRadius:"8px",border:`1px solid ${item.done?"var(--green)44":"var(--border)"}`,background:item.done?"var(--green)0a":"var(--bg2)",cursor:"pointer",transition:"all 0.15s",flexShrink:0}}>
+                          <span style={{fontSize:"14px"}}>{item.done?"✅":item.icon}</span>
+                          <span style={{fontFamily:"'Figtree',sans-serif",fontSize:"13px",fontWeight:"700",color:item.done?"var(--green)":"var(--text)"}}>{item.label}</span>
+                          {!item.done&&item.xp>0&&<span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:"10px",fontWeight:"700",color:"var(--accent)",background:"var(--accent)12",borderRadius:"4px",padding:"1px 5px"}}>+{item.xp}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Recent badges — click to open full achievement panel */}
+                  {recentBadges.length>0&&(
+                    <div onClick={()=>setShowBadges(true)} style={{paddingLeft:"8px",borderTop:"1px solid var(--border)",paddingTop:"10px",display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap",cursor:"pointer"}}>
+                      <span style={{fontFamily:"'Figtree',sans-serif",fontSize:"12px",fontWeight:"800",color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.1em",flexShrink:0}}>Badges</span>
+                      {recentBadges.map(b=>(
+                        <div key={b.id} title={b.desc}
+                          style={{display:"flex",alignItems:"center",gap:"4px",padding:"3px 8px",borderRadius:"20px",background:"var(--accent)10",border:"1px solid var(--accent)22"}}>
+                          <span style={{fontSize:"13px"}}>{b.icon}</span>
+                          <span style={{fontFamily:"'Figtree',sans-serif",fontSize:"12px",fontWeight:"700",color:"var(--text)"}}>{b.label}</span>
+                        </div>
+                      ))}
+                      <span style={{fontFamily:"'Figtree',sans-serif",fontSize:"12px",color:"var(--accent)",fontWeight:"700",marginLeft:"auto",flexShrink:0}}>View all →</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ══ AI DAILY BRIEF — Anthropic-powered morning summary ══ */}
+            {(()=>{
+              const todayStr = new Date().toISOString().slice(0,10);
+              const todayDiary = diaries.filter(d=>d.date&&d.date.slice(0,10)===todayStr);
+              const workersNow = workers.filter(w=>(w.status||"active")==="active").length || workers.length;
+              const overdueCt  = wps.filter(w=>w.status!=="done"&&w.endDate&&w.endDate<todayStr).length;
+              const snap = {
+                project:site.name, location:site.location||"", progress:totalProgress,
+                daysLeft, workers:workersNow, overdue:overdueCt, risks:openRisks,
+                phases:phases.map(p=>({name:p.name,status:p.status,progress:p.progress})).slice(0,6),
+                todayDiary:todayDiary.map(d=>d.title||d.notes||"").filter(Boolean).slice(0,3),
+                matAlerts,
+              };
+              const handleToggle = () => {
+                if(!aiOpen){ setAiOpen(true); if(!aiText&&!aiLoading) generateBrief(snap); }
+                else setAiOpen(false);
+              };
+              const handleRetry = () => generateBrief(snap);
+              return (
+                <div style={{marginBottom:"14px",borderRadius:"14px",border:"1px solid var(--border)",background:"var(--bg2)",overflow:"hidden"}}>
+                  {/* Header row — always visible */}
+                  <button onClick={handleToggle}
+                    style={{width:"100%",display:"flex",alignItems:"center",gap:"10px",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}>
+                    <div style={{width:"32px",height:"32px",borderRadius:"10px",background:"linear-gradient(135deg,#7C3AED,#A855F7)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"17px",flexShrink:0}}>✨</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"14px",fontWeight:"800",color:"var(--text)"}}>AI Daily Brief</div>
+                      <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"12px",color:"var(--text3)"}}>Claude-powered morning summary for your site</div>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:"8px",flexShrink:0}}>
+                      {aiText&&!aiOpen&&<span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:"10px",fontWeight:"700",color:"var(--green)",background:"var(--green)15",borderRadius:"4px",padding:"2px 6px"}}>READY</span>}
+                      <span style={{fontSize:"16px",color:"var(--text3)",transform:aiOpen?"rotate(180deg)":"none",transition:"transform 0.2s"}}>▾</span>
+                    </div>
+                  </button>
+                  {/* Expanded panel */}
+                  {aiOpen&&(
+                    <div style={{padding:"0 16px 14px",borderTop:"1px solid var(--border)"}}>
+                      {aiLoading&&(
+                        <div style={{display:"flex",alignItems:"center",gap:"10px",padding:"14px 0",color:"var(--text3)"}}>
+                          <div style={{width:"16px",height:"16px",border:"2px solid #A855F7",borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.8s linear infinite",flexShrink:0}}/>
+                          <span style={{fontFamily:"'Figtree',sans-serif",fontSize:"14px"}}>Briefing your site…</span>
+                        </div>
+                      )}
+                      {aiError&&!aiLoading&&(
+                        <div style={{padding:"12px 0",display:"flex",alignItems:"center",gap:"8px"}}>
+                          <span style={{color:"var(--red)",fontSize:"14px",fontFamily:"'Figtree',sans-serif"}}>{aiError}</span>
+                          <button onClick={handleRetry} style={{background:"var(--accent)",color:"#fff",border:"none",borderRadius:"6px",padding:"4px 10px",fontSize:"13px",fontWeight:"700",cursor:"pointer",flexShrink:0}}>Retry</button>
+                        </div>
+                      )}
+                      {aiText&&!aiLoading&&(
+                        <div style={{paddingTop:"12px"}}>
+                          <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"14px",color:"var(--text)",lineHeight:1.75,whiteSpace:"pre-wrap"}}>{aiText}</div>
+                          <button onClick={handleRetry}
+                            style={{marginTop:"12px",background:"none",border:"1px solid var(--border)",borderRadius:"8px",padding:"5px 12px",fontFamily:"'Figtree',sans-serif",fontSize:"12px",fontWeight:"700",color:"var(--text3)",cursor:"pointer"}}>
+                            ↺ Regenerate
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             <div className="mob-hero card" style={{marginBottom:"14px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"12px",marginBottom:"14px"}}>
                 <div style={{flex:1,minWidth:0}}>
@@ -13598,6 +13985,8 @@ function App(){
               const todayEntry = diaries.filter(d=>d.date&&d.date.slice(0,10)===todayStr).slice(-1)[0]||diaries.slice(-1)[0];
               const handleGenerate = () => {
                 if(hasAddon("reports")) {
+                  const {earned}=awardGami("report_gen"); refreshGami();
+                  showToast(`📊 Generating report · +${earned} XP`);
                   setView("report");
                 } else {
                   setShowPremium("reports");
@@ -14111,7 +14500,7 @@ function App(){
         )}
 
         {/* ── MATERIALS ── */}
-        {view==="materials"&&<MaterialsView materials={materials} setMaterials={isDemoUser?(()=>showToast("🔒 Demo is view-only — sign up to edit materials")):m=>{setMaterials(m);showToast("✓ Materials updated");}}/>}
+        {view==="materials"&&<MaterialsView materials={materials} setMaterials={isDemoUser?(()=>showToast("🔒 Demo is view-only — sign up to edit materials")):m=>{const prev=materials.length;setMaterials(m);if(m.length>prev){const {earned}=awardGami("material_add");refreshGami();showToast(`✓ Material added · +${earned} XP`);}else{showToast("✓ Materials updated");}}}/>}
 
         {/* ── PROVISIONS ── */}
         {view==="provisions"&&(
@@ -14136,7 +14525,7 @@ function App(){
         )}
 
         {/* ── DIARY ── */}
-        {view==="diary"&&<DiaryView diaries={diaries} setDiaries={isDemoUser?(()=>showToast("🔒 Demo is view-only — sign up to log entries")):d=>{setDiaries(d);showToast("✓ Diary entry saved");}} team={team} workers={workers} currentUserId={profile?.id||null} site={site}/>}
+        {view==="diary"&&<DiaryView diaries={diaries} setDiaries={isDemoUser?(()=>showToast("🔒 Demo is view-only — sign up to log entries")):d=>{setDiaries(d);const {earned}=awardGami("diary_entry");refreshGami();showToast(`✓ Diary entry saved · +${earned} XP 🏗`);}} team={team} workers={workers} currentUserId={profile?.id||null} site={site}/>}
         {view==="timeline"&&(hasAddon("timeline")
           ? <PhotoTimeline diaries={diaries} site={site}/>
           : <PaywallGate feature="timeline" planNeeded="pro" onUpgrade={()=>setShowPlanPayment(true)}/>
@@ -14284,7 +14673,7 @@ function App(){
 
         {/* ── TEAM ── */}
         {view==="team"&&(hasAddon("gps")
-          ? <TeamAttendanceView site={site} workers={workers} setWorkers={isDemoUser?(()=>showToast("🔒 Demo is view-only — sign up to log attendance")):setWorkers} team={team} wps={wps} projectId={projects[activeProject]?.id||"local"} showToast={showToast}/>
+          ? <TeamAttendanceView site={site} workers={workers} setWorkers={isDemoUser?(()=>showToast("🔒 Demo is view-only — sign up to log attendance")):(w)=>{setWorkers(w);awardGami("attendance");refreshGami();}} team={team} wps={wps} projectId={projects[activeProject]?.id||"local"} showToast={showToast}/>
           : <PaywallGate feature="gps" planNeeded="pro" onUpgrade={()=>setShowPlanPayment(true)}/>
         )}
 
