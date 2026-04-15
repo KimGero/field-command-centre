@@ -30,47 +30,73 @@
   </script>
   <link rel="manifest" id="mradi-manifest"/>
   <script>
+  // ── PWA Manifest: rasterise SVG→PNG via canvas (Chrome Android requires PNG)
+  // then host the manifest as a Blob URL (Chrome Android rejects data: URIs).
   (function(){
     const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="108" fill="#07070D"/><rect x="56" y="72" width="400" height="310" rx="36" fill="#FF5C00"/><rect x="56" y="72" width="400" height="310" rx="36" fill="url(#inn)" opacity="0.3"/><defs><linearGradient id="inn" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#fff" stop-opacity="0.2"/><stop offset="100%" stop-color="#000" stop-opacity="0.2"/></linearGradient></defs><text x="256" y="348" font-size="280" font-weight="900" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" fill="#07070D">M</text><text x="256" y="470" font-size="86" font-weight="700" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" fill="#FF5C00" letter-spacing="18">mradi</text></svg>`;
-    const iconUrl = 'data:image/svg+xml,' + encodeURIComponent(iconSvg);
 
-    const manifest = {
-      name: "Mradi HQ — Field Command Centre",
-      short_name: "Mradi HQ",
-      description: "Site diary, GPS attendance, M-Pesa payments, materials & client reports — built for African contractors. v2.0",
-      start_url: "./",
-      id: "./",
-      scope: "./",
-      display: "standalone",
-      display_override: ["window-controls-overlay", "standalone", "minimal-ui"],
-      orientation: "any",
-      background_color: "#07070D",
-      theme_color: "#FF5C00",
-      categories: ["business", "productivity", "utilities"],
-      lang: "en",
-      dir: "ltr",
-      icons: [
-        { src: iconUrl, sizes: "192x192",  type: "image/svg+xml", purpose: "any maskable" },
-        { src: iconUrl, sizes: "512x512",  type: "image/svg+xml", purpose: "any maskable" },
-        { src: iconUrl, sizes: "1024x1024",type: "image/svg+xml", purpose: "any" },
-      ],
-      shortcuts: [
-        { name: "Site Diary",      short_name: "Diary",    url: "./?view=diary",     description: "Log today's site progress" },
-        { name: "Overview",        short_name: "Overview", url: "./?view=overview",  description: "Project command centre" },
-        { name: "Team Attendance", short_name: "Attendance",url: "./?view=team",     description: "GPS worker check-in" },
-        { name: "Materials",       short_name: "Materials",url: "./?view=materials", description: "Track material stock" },
-      ],
-      screenshots: [
-        { src: iconUrl, sizes: "512x512", type: "image/svg+xml", form_factor: "narrow",  label: "Mobile command centre" },
-        { src: iconUrl, sizes: "512x512", type: "image/svg+xml", form_factor: "wide",    label: "Desktop dashboard" },
-      ],
-      protocol_handlers: [],
-      prefer_related_applications: false,
-    };
+    // Render SVG onto a canvas and export as PNG data URLs for each required size.
+    function svgToPng(size) {
+      return new Promise(resolve => {
+        const img = new Image();
+        const svgBlob = new Blob([iconSvg], { type: 'image/svg+xml' });
+        const svgUrl = URL.createObjectURL(svgBlob);
+        img.onload = () => {
+          const c = document.createElement('canvas');
+          c.width = c.height = size;
+          c.getContext('2d').drawImage(img, 0, 0, size, size);
+          URL.revokeObjectURL(svgUrl);
+          resolve(c.toDataURL('image/png'));
+        };
+        img.onerror = () => { URL.revokeObjectURL(svgUrl); resolve(null); };
+        img.src = svgUrl;
+      });
+    }
 
-    const manifestStr = JSON.stringify(manifest);
-    const dataUri = 'data:application/manifest+json,' + encodeURIComponent(manifestStr);
-    document.getElementById('mradi-manifest').setAttribute('href', dataUri);
+    async function buildManifest() {
+      const [png192, png512] = await Promise.all([svgToPng(192), svgToPng(512)]);
+      const icons = [];
+      if (png192) icons.push({ src: png192, sizes: '192x192', type: 'image/png', purpose: 'any maskable' });
+      if (png512) icons.push({ src: png512, sizes: '512x512', type: 'image/png', purpose: 'any maskable' });
+      // Fallback: if canvas failed (very unlikely) keep SVG so install isn't broken on desktop
+      if (!icons.length) {
+        const svgUrl = 'data:image/svg+xml,' + encodeURIComponent(iconSvg);
+        icons.push({ src: svgUrl, sizes: '192x192', type: 'image/svg+xml', purpose: 'any maskable' });
+        icons.push({ src: svgUrl, sizes: '512x512', type: 'image/svg+xml', purpose: 'any maskable' });
+      }
+
+      const manifest = {
+        name: "Mradi HQ — Field Command Centre",
+        short_name: "Mradi HQ",
+        description: "Site diary, GPS attendance, M-Pesa payments, materials & client reports — built for African contractors. v2.0",
+        start_url: "./",
+        id: "./",
+        scope: "./",
+        display: "standalone",
+        display_override: ["window-controls-overlay", "standalone", "minimal-ui"],
+        orientation: "any",
+        background_color: "#07070D",
+        theme_color: "#FF5C00",
+        categories: ["business", "productivity", "utilities"],
+        lang: "en",
+        dir: "ltr",
+        icons,
+        shortcuts: [
+          { name: "Site Diary",      short_name: "Diary",      url: "./?view=diary",     description: "Log today's site progress" },
+          { name: "Overview",        short_name: "Overview",   url: "./?view=overview",  description: "Project command centre" },
+          { name: "Team Attendance", short_name: "Attendance", url: "./?view=team",      description: "GPS worker check-in" },
+          { name: "Materials",       short_name: "Materials",  url: "./?view=materials", description: "Track material stock" },
+        ],
+        prefer_related_applications: false,
+      };
+
+      // Use Blob URL — Chrome Android rejects data: URI manifests for PWA install
+      const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
+      const manifestUrl  = URL.createObjectURL(manifestBlob);
+      document.getElementById('mradi-manifest').setAttribute('href', manifestUrl);
+    }
+
+    buildManifest().catch(console.warn);
   })();
   </script>
   <meta name="mobile-web-app-capable" content="yes"/>
@@ -228,17 +254,17 @@ self.addEventListener('sync', e => {
     try {
       // Try the real /sw.js first (production Vercel deploy with a real SW file)
       // Fall back to inline blob SW if /sw.js returns 404 or errors
+      // Only register real /sw.js — blob-URL service workers have null origin so
+      // Chrome Android blocks them from controlling the page, which prevents
+      // beforeinstallprompt from ever firing. Deploy sw.js to the Vercel root.
       fetch('/sw.js', {method:'HEAD'}).then(r => {
         if(r.ok) {
           registerSW('/sw.js', {scope:'/'});
         } else {
-          throw new Error('sw.js not found (status ' + r.status + ')');
+          console.info('[Mradi SW] /sw.js not found — deploy sw.js to Vercel root for offline + PWA install support');
         }
-      }).catch(() => {
-        // Inline fallback: register a blob-URL SW
-        const blob = new Blob([swCode], {type:'application/javascript'});
-        const blobUrl = URL.createObjectURL(blob);
-        registerSW(blobUrl, {});
+      }).catch(e => {
+        console.info('[Mradi SW] Could not reach /sw.js:', e.message);
       });
     } catch(e) { console.warn('[Mradi SW] SW setup error:', e.message); }
 
@@ -7823,6 +7849,74 @@ const saveDailyRegs = (projId, regs) => {
   try { localStorage.setItem(DR_KEY(projId), JSON.stringify(regs)); } catch {}
 };
 
+// ── Cloud sync: Attendance ────────────────────────────────────────────────────
+// Writes a single clock-in/out record to Supabase (fire-and-forget).
+const sbSaveAttendanceRecord = async (projId, record) => {
+  if (!sbReady()) return;
+  try {
+    const token = sbAuthToken();
+    await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/attendance`, {
+      method: 'POST',
+      headers: {
+        'apikey': FCC_CONFIG.supabaseKey,
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify({ ...record, project_id: projId }),
+    });
+  } catch(e) { console.warn('[Mradi] sbSaveAttendanceRecord failed:', e.message); }
+};
+
+// Reads all attendance records for a project from Supabase.
+const sbLoadAttendanceCloud = async (projId) => {
+  if (!sbReady()) return null;
+  try {
+    const token = sbAuthToken();
+    const res = await fetch(
+      `${FCC_CONFIG.supabaseUrl}/rest/v1/attendance?project_id=eq.${encodeURIComponent(projId)}&order=ts.asc`,
+      { headers: { 'apikey': FCC_CONFIG.supabaseKey, 'Authorization': 'Bearer ' + token } }
+    );
+    if (!res.ok) return null;
+    return await res.json(); // array of records
+  } catch(e) { console.warn('[Mradi] sbLoadAttendanceCloud failed:', e.message); return null; }
+};
+
+// ── Cloud sync: Daily Register ────────────────────────────────────────────────
+// Upserts a single date entry to Supabase (fire-and-forget).
+const sbSaveDailyRegCloud = async (projId, dateKey, entry) => {
+  if (!sbReady()) return;
+  try {
+    const token = sbAuthToken();
+    await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/daily_register`, {
+      method: 'POST',
+      headers: {
+        'apikey': FCC_CONFIG.supabaseKey,
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify({ project_id: projId, date: dateKey, data: entry, updated_at: new Date().toISOString() }),
+    });
+  } catch(e) { console.warn('[Mradi] sbSaveDailyRegCloud failed:', e.message); }
+};
+
+// Reads all daily register entries for a project from Supabase.
+const sbLoadDailyRegsCloud = async (projId) => {
+  if (!sbReady()) return null;
+  try {
+    const token = sbAuthToken();
+    const res = await fetch(
+      `${FCC_CONFIG.supabaseUrl}/rest/v1/daily_register?project_id=eq.${encodeURIComponent(projId)}&order=date.asc`,
+      { headers: { 'apikey': FCC_CONFIG.supabaseKey, 'Authorization': 'Bearer ' + token } }
+    );
+    if (!res.ok) return null;
+    const rows = await res.json();
+    // Reconstruct the { [dateKey]: entry } shape used by the app
+    return rows.reduce((acc, row) => { acc[row.date] = row.data; return acc; }, {});
+  } catch(e) { console.warn('[Mradi] sbLoadDailyRegsCloud failed:', e.message); return null; }
+};
+
 async function gpsClockAction({ action, workerId, workerName, projectId, siteLat, siteLng, radiusM }) {
   radiusM = radiusM || 200;
   let pos;
@@ -7848,6 +7942,7 @@ async function gpsClockAction({ action, workerId, workerName, projectId, siteLat
   const records = loadAttendance(projectId);
   records.push(record);
   saveAttendance(projectId, records);
+  sbSaveAttendanceRecord(projectId, record); // sync to cloud (fire-and-forget)
   notifAttendance(workerName, action);
   return { ok: true, record, distanceM };
 }
@@ -12394,18 +12489,39 @@ Write the morning brief now:`;
           const cloudProjects = await sbLoadProjects(uid);
           if(cloudProjects && cloudProjects.length > 0){
             const localProjects = load("ahp_projects")||[];
-            const localIds = new Set(localProjects.map(p=>p.id).filter(Boolean));
-            const cloudOnly = cloudProjects.filter(p=>p.id && !localIds.has(p.id));
-            const merged = [...localProjects, ...cloudOnly];
-            if(cloudOnly.length > 0){
-              persist("ahp_projects", merged);
-              setProjects(merged);
-              // Open first new cloud project as a tab
-              if(cloudOnly[0]?.id) setOpenProjectIds(ids=>[...new Set([...ids, cloudOnly[0].id])]);
+
+            // Build lookup map of local projects by id
+            const localById = {};
+            localProjects.forEach(p=>{ if(p.id) localById[p.id]=p; });
+            const cloudIds = new Set(cloudProjects.map(p=>p.id).filter(Boolean));
+
+            let newFromCloud = 0, updatedFromCloud = 0;
+
+            // Merge: for each cloud project, prefer the newer version
+            const merged = cloudProjects.map(cloud => {
+              const local = localById[cloud.id];
+              if(!local){ newFromCloud++; return cloud; }
+              const cloudTs = new Date(cloud._cloudUpdatedAt || cloud.updated_at || 0).getTime();
+              const localTs  = new Date(local.updated_at || 0).getTime();
+              if(cloudTs > localTs){ updatedFromCloud++; return { ...cloud }; }
+              return local;
+            });
+
+            // Keep any local-only projects not yet pushed to cloud
+            localProjects.forEach(p=>{ if(p.id && !cloudIds.has(p.id)) merged.push(p); });
+
+            persist("ahp_projects", merged);
+            setProjects(merged);
+
+            if(newFromCloud > 0){
+              const firstNew = cloudProjects.find(p=>p.id && !localById[p.id]);
+              if(firstNew?.id) setOpenProjectIds(ids=>[...new Set([...ids, firstNew.id])]);
               const orgLabel = getOrg()?.name ? ` (${getOrg().name})` : "";
-              showToast(`☁ ${cloudOnly.length} project(s) loaded from cloud${orgLabel}`);
+              showToast(`☁ ${newFromCloud} project(s) loaded from cloud${orgLabel}`);
+            } else if(updatedFromCloud > 0){
+              showToast(`☁ ${updatedFromCloud} project(s) refreshed from cloud`);
             } else {
-              showToast("☁ Projects synced");
+              showToast("☁ Projects synced — all up to date");
             }
           }
         }catch(e){ console.warn("Cloud sync:", e.message); }
@@ -15047,13 +15163,21 @@ function DailyRegisterTab({ workers, projectId, todayStr, showToast }) {
   const [draft,    setDraft]        = useState({});    // workerId → {status, note}
   const [regNote,  setRegNote]      = useState("");    // whole-day foreman note
 
-  // Reload when project changes
+  // Reload when project changes — also merge in cloud data
   useEffect(() => {
-    const regs = loadDailyRegs(projectId);
-    setAllRegs(regs);
+    const local = loadDailyRegs(projectId);
+    setAllRegs(local);
     setEditing(false);
     setDraft({});
     setRegNote("");
+    // Merge cloud records: cloud wins for dates it has, keep any extra local dates
+    sbLoadDailyRegsCloud(projectId).then(cloud => {
+      if (!cloud) return;
+      setAllRegs(prev => ({ ...prev, ...cloud }));
+      // Persist merged result to localStorage so next load is instant
+      const merged = { ...loadDailyRegs(projectId), ...cloud };
+      saveDailyRegs(projectId, merged);
+    });
   }, [projectId]);
 
   // ── derived data ─────────────────────────────────────────────────────────
@@ -15106,6 +15230,7 @@ function DailyRegisterTab({ workers, projectId, todayStr, showToast }) {
     };
     setAllRegs(updated);
     saveDailyRegs(projectId, updated);
+    sbSaveDailyRegCloud(projectId, viewDate, updated[viewDate]); // sync to cloud (fire-and-forget)
     setEditing(false);
     showToast(`✓ Register saved — ${present} present, ${activeWorkers.length - present} absent/other`);
   };
@@ -15356,8 +15481,20 @@ function TeamAttendanceView({ site, workers, setWorkers, team, wps, projectId, s
   const [attLoading, setAttLoading] = useState({});
   const [attMsg, setAttMsg] = useState({});
 
-  // Refresh records when projectId changes
-  React.useEffect(() => { setAttRecords(loadAttendance(projectId)); }, [projectId]);
+  // Refresh records when projectId changes — also merge in cloud data
+  React.useEffect(() => {
+    setAttRecords(loadAttendance(projectId));
+    sbLoadAttendanceCloud(projectId).then(cloud => {
+      if (!cloud || !cloud.length) return;
+      // Merge: deduplicate by record id, cloud wins on conflicts
+      const local = loadAttendance(projectId);
+      const byId = {};
+      [...local, ...cloud].forEach(r => { byId[r.id] = r; });
+      const merged = Object.values(byId).sort((a,b) => a.ts > b.ts ? 1 : -1);
+      saveAttendance(projectId, merged);
+      setAttRecords(merged);
+    });
+  }, [projectId]);
 
   const doClockAction = async (m, action) => {
     setAttLoading(l => ({ ...l, [m.id + action]: true }));
