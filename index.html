@@ -6,14 +6,12 @@
   <title>Mradi HQ</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,300;1,400;1,500&family=Figtree:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,300;1,400&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <!-- Supabase JS v2 — real-time sync + presence -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="https://js.paystack.co/v1/inline.js"></script>
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-X8RSQFS80B"></script>
   <script>
     window.dataLayer=window.dataLayer||[];
@@ -2764,8 +2762,14 @@ self.addEventListener('sync', e => {
   </style>
 </head>
 <body>
-<div id="root" style="position:relative;z-index:1;"></div>
-<script type="text/babel">
+<div id="root" style="position:relative;z-index:1;">
+  <div id="mradi-splash" style="position:fixed;inset:0;background:#07070D;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:16px;">
+    <svg viewBox="0 0 48 56" width="56" height="65" xmlns="http://www.w3.org/2000/svg" style="animation:mspin 1.2s ease-in-out infinite"><rect x="0" y="0" width="48" height="38" rx="7" fill="#FF5C00"/><text x="24" y="31" font-size="28" font-weight="900" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" fill="#07070D">M</text></svg>
+    <div style="font-family:monospace;font-size:11px;letter-spacing:0.15em;color:#FF5C00;text-transform:uppercase">Loading Mradi HQ…</div>
+    <style>@keyframes mspin{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}</style>
+  </div>
+</div>
+<script type="text/babel" data-presets="env,react">
 const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
 
@@ -5271,7 +5275,7 @@ function DiaryView({diaries,setDiaries,team,workers,currentUserId,site}){
   const now = new Date();
   const [calYear,  setCalYear]  = useState(now.getFullYear());
   const [calMonth, setCalMonth] = useState(now.getMonth()); // 0-indexed
-  const [selectedDate, setSelectedDate] = useState(null);   // "YYYY-MM-DD" | null
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0,10));   // "YYYY-MM-DD" | null
   const [showAdd,  setShowAdd]  = useState(false);
   const [form,     setForm]     = useState(null);
   const [lightbox, setLightbox] = useState(null);
@@ -5327,7 +5331,15 @@ function DiaryView({diaries,setDiaries,team,workers,currentUserId,site}){
     setUploading(false);
   };
 
-  const allPeople = [...team, ...(workers||[])];
+
+  // Auto-open new entry form if today has no entries yet
+  React.useEffect(()=>{
+    if(selectedDate===todayStr && !(entriesByDate[todayStr]||[]).length && !showAdd){
+      newEntry(todayStr);
+    }
+  },[]);
+
+    const allPeople = [...team, ...(workers||[])];
   const newEntry = (dateStr) => {
     setForm({id:`D${String(diaries.length+1).padStart(3,"0")}`,date:dateStr||todayStr,weather:"sunny",gangsPresent:0,temperature:"",works:[{area:"",description:"",manHours:0,materials:""}],workforce:[],photos:[],issues:"",visitors:"",author:team[0]?.id||"PM"});
     setShowAdd(true);
@@ -6338,7 +6350,15 @@ function IntegrationHub({proj,onImport,onClose,showToast}){
   const log=msg=>setImportLog(l=>[{msg,ts:new Date().toLocaleTimeString()}, ...l.slice(0,29)]);
 
   /* ── EXCEL EXPORT ── */
-  const exportExcel=()=>{
+  const loadXLSX=(cb)=>{
+    if(window.XLSX){cb();return;}
+    const s=document.createElement("script");
+    s.src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    s.onload=cb;
+    s.onerror=()=>showToast("⚠ Could not load Excel library. Check connection.");
+    document.head.appendChild(s);
+  };
+  const exportExcel=()=>loadXLSX(()=>{
     const wb=XLSX.utils.book_new();
     // Sheet 1: Phases
     const wsPhases=XLSX.utils.json_to_sheet(phases.map(p=>({
@@ -6401,7 +6421,7 @@ function IntegrationHub({proj,onImport,onClose,showToast}){
     XLSX.utils.book_append_sheet(wb,wsDiary,"Site Diary");
     XLSX.writeFile(wb,`${slug}_AHP_Export_${today()}.xlsx`);
     showToast("✓ Excel export downloaded");
-  };
+  });
 
   /* ── UNIVERSAL IMPORT DISPATCHER ── */
   /* Detects file type and routes to the correct parser */
@@ -8439,83 +8459,85 @@ const genShareId = () => {
 
 const sbSaveSnapshot = async (payload, userId) => {
   if(!sbReady()) throw new Error("Cloud storage not available.");
-  // Ensure userId is a real UUID before sending to Postgres — any non-UUID string
-  // causes a 22P02 error. guest-*, local-*, demo-* and other synthetic IDs must be null.
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const safeCreatedBy = (userId && UUID_RE.test(userId)) ? userId : null;
   const id = genShareId();
-  let res;
-  try {
-    res = await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/fcc_snapshots`, {
-      method: "POST",
-      headers: {
-        "apikey":        FCC_CONFIG.supabaseKey,
-        "Authorization": `Bearer ${sbAuthToken()}`,
-        "Content-Type":  "application/json",
-        "Prefer":        "return=minimal"
-      },
-      body: JSON.stringify({
-        id,
-        data:       payload,
-        created_by: safeCreatedBy
-      })
-    });
-  } catch(netErr) {
-    throw new Error("Network error — check your connection and try again.");
-  }
-  if(!res.ok) {
-    const txt = await res.text().catch(()=>"");
-    // Auto-refresh JWT and retry once
-    if(txt.includes("JWT expired") || txt.includes("PGRST303")) {
-      const newToken = await sbRefreshSession();
-      if(newToken) {
-        // Retry with fresh token
-        const res2 = await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/fcc_snapshots`, {
-          method: "POST",
-          headers: {
-            "apikey":        FCC_CONFIG.supabaseKey,
-            "Authorization": `Bearer ${newToken}`,
-            "Content-Type":  "application/json",
-            "Prefer":        "return=minimal"
-          },
-          body: JSON.stringify({ id, data: payload, created_by: safeCreatedBy })
-        });
-        if(res2.ok) return id;
-        const txt2 = await res2.text().catch(()=>"");
-        throw new Error("Failed to save snapshot: " + (txt2||res2.status));
-      }
-      // No refresh token available — try with anon key (RLS allows public insert)
-      const res3 = await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/fcc_snapshots`, {
+
+  // Helper: attempt one insert with a given token, returns Response
+  const tryInsert = async (token) => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(()=>ctrl.abort(), 12000); // 12s timeout
+    try{
+      const r = await fetch(`${FCC_CONFIG.supabaseUrl}/rest/v1/fcc_snapshots`, {
         method: "POST",
-        headers: {
+        headers:{
           "apikey":        FCC_CONFIG.supabaseKey,
-          "Authorization": `Bearer ${FCC_CONFIG.supabaseKey}`,
+          "Authorization": `Bearer ${token}`,
           "Content-Type":  "application/json",
           "Prefer":        "return=minimal"
         },
-        body: JSON.stringify({ id, data: payload, created_by: safeCreatedBy })
+        body: JSON.stringify({ id, data: payload, created_by: safeCreatedBy }),
+        signal: ctrl.signal
       });
-      if(res3.ok) return id;
+      return r;
+    } finally { clearTimeout(timer); }
+  };
+
+  // Attempt order: 1) auth token, 2) refreshed token, 3) anon key (public insert)
+  const attempts = [];
+  const authToken = sbAuthToken();
+  if(authToken && authToken !== FCC_CONFIG.supabaseKey) attempts.push(authToken);
+  attempts.push(FCC_CONFIG.supabaseKey); // anon key always as final fallback
+
+  let lastErr = "";
+  for(const token of attempts){
+    let res;
+    try{ res = await tryInsert(token); }
+    catch(e){
+      if(e.name === "AbortError") throw new Error("Request timed out — check your connection.");
+      throw new Error("Network error — check your connection.");
     }
-    throw new Error("Failed to save snapshot: " + (txt||res.status));
+    if(res.ok) return id;
+    const txt = await res.text().catch(()=>"");
+    // If JWT expired, try to refresh and add refreshed token to front of remaining attempts
+    if((txt.includes("JWT expired") || txt.includes("PGRST303")) && token !== FCC_CONFIG.supabaseKey){
+      try{
+        const refreshed = await sbRefreshSession();
+        if(refreshed && refreshed !== token) attempts.splice(1, 0, refreshed);
+      }catch{}
+    }
+    lastErr = txt || String(res.status);
   }
-  return id;
+  throw new Error("Share link failed — check Supabase fcc_snapshots RLS allows public insert. (" + lastErr.slice(0,120) + ")");
 };
 
 const sbLoadSnapshot = async (id) => {
   if(!sbReady() || !id) return null;
-  try {
-    const res = await fetch(
-      `${FCC_CONFIG.supabaseUrl}/rest/v1/fcc_snapshots?id=eq.${encodeURIComponent(id)}&select=data,expires_at`,
-      { headers: { "apikey": FCC_CONFIG.supabaseKey, "Authorization": `Bearer ${FCC_CONFIG.supabaseKey}` } }
-    );
-    if(!res.ok) return null;
-    const rows = await res.json();
-    if(!rows?.length) return null;
-    const row = rows[0];
-    if(row.expires_at && new Date(row.expires_at) < new Date()) return null; // expired
-    return row.data;
-  } catch(e) { return null; }
+  // Try with auth token first (in case RLS requires it), fall back to anon
+  const tokens = [FCC_CONFIG.supabaseKey];
+  const authToken = sbAuthToken();
+  if(authToken && authToken !== FCC_CONFIG.supabaseKey) tokens.unshift(authToken);
+
+  for(const token of tokens){
+    try{
+      const ctrl = new AbortController();
+      const timer = setTimeout(()=>ctrl.abort(), 10000);
+      let res;
+      try{
+        res = await fetch(
+          `${FCC_CONFIG.supabaseUrl}/rest/v1/fcc_snapshots?id=eq.${encodeURIComponent(id)}&select=data,expires_at`,
+          { headers: { "apikey": FCC_CONFIG.supabaseKey, "Authorization": `Bearer ${token}` }, signal: ctrl.signal }
+        );
+      } finally { clearTimeout(timer); }
+      if(!res.ok) continue;
+      const rows = await res.json();
+      if(!rows?.length) return null; // not found — don't retry, it's just missing
+      const row = rows[0];
+      if(row.expires_at && new Date(row.expires_at) < new Date()) return null; // expired
+      return row.data;
+    } catch(e) { if(e.name==="AbortError") throw new Error("timeout"); continue; }
+  }
+  return null;
 };
 
 /* ── 4a-3. SUPABASE STORAGE — PHOTO UPLOADS ─────────────────────
@@ -10615,7 +10637,10 @@ function ShareSnapshotModal({proj,diaries,materials,provisions,onClose,showToast
     _shared:true, _sharedAt:new Date().toISOString()
   });
 
-  // ── Generate short link ───────────────────────────────────────
+  // ── Auto-generate on open ─────────────────────────────────────
+  React.useEffect(()=>{ generateLink(); },[]);
+
+  // ── Generate short link ────────────────────────────────────────
   const generateLink = async () => {
     setPhase("generating"); setErrorMsg("");
     try {
@@ -10631,7 +10656,7 @@ function ShareSnapshotModal({proj,diaries,materials,provisions,onClose,showToast
       setPhase("done");
       if(window.fccTrack) window.fccTrack("snapshot_saved",{id});
     } catch(e) {
-      setErrorMsg(e.message || "Failed to generate link.");
+      setErrorMsg(e.message || "Failed to generate link. Check your internet connection and try again.");
       setPhase("error");
     }
   };
@@ -10710,21 +10735,11 @@ function ShareSnapshotModal({proj,diaries,materials,provisions,onClose,showToast
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:"18px",padding:"2px"}}>✕</button>
         </div>
 
-        {/* ── IDLE: Generate button ── */}
+        {/* ── IDLE: auto-transitions immediately to generating ── */}
         {phase==="idle" && (
-          <div style={{textAlign:"center",padding:"24px 0"}}>
-            <div style={{fontSize:"40px",marginBottom:"14px"}}>🔗</div>
-            <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"16px",fontWeight:"800",color:"var(--text)",marginBottom:"8px"}}>
-              Send your client a professional project link
-            </div>
-            <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"14px",color:"var(--text3)",lineHeight:1.7,marginBottom:"20px"}}>
-              One tap → your client sees photos, schedule, progress & milestones.<br/>
-              <strong style={{color:"var(--accent)"}}>No app needed on their end.</strong> Works in WhatsApp, SMS, email.<br/>
-              Link is valid for <strong>90 days</strong>.
-            </div>
-            <button className="btn-primary" style={{padding:"13px 28px",fontSize:"14px"}} onClick={generateLink}>
-              Generate Client Link →
-            </button>
+          <div style={{textAlign:"center",padding:"32px 0",color:"var(--text3)",fontFamily:"'JetBrains Mono',monospace",fontSize:"13px"}}>
+            <div style={{width:"28px",height:"28px",border:"3px solid var(--accent)",borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}/>
+            Preparing link…
           </div>
         )}
 
@@ -11780,7 +11795,6 @@ function App(){
   const [showOrgPanel, setShowOrgPanel] = useState(false);   // AccountPanel (profile/addons)
   const [showOrgMgmt,  setShowOrgMgmt]  = useState(false);   // OrgPanel (team/invite/admin)
   const [showOrgSetup, setShowOrgSetup] = useState(false);   // OrgSetupScreen (first-time)
-  const [showBadges,   setShowBadges]   = useState(false);   // Badges & achievements drawer
   const [orgSetupJoinCode, setOrgSetupJoinCode] = useState(null); // prefill code from ?join=
   const [showPremium, setShowPremium] = useState(null); // addonId or null
   const [addons, setAddons] = useState(getAddons);
@@ -12311,21 +12325,7 @@ function App(){
   };
 
   useEffect(()=>{const t=setInterval(()=>setTime(new Date()),1000);return()=>clearInterval(t);},[]);
-
-  // ── Daily gamification: award XP on first open each day ───────────────
-  const [gamiState, setGamiState] = React.useState(()=>getGami());
-  React.useEffect(()=>{
-    if(!profile?.isDemo && !profile?.isGuest){
-      const today = new Date().toISOString().slice(0,10);
-      const g = getGami();
-      if(g.lastDate !== today){
-        const {g:updated} = awardGami("app_open");
-        setGamiState({...updated});
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[]);
-  const refreshGami = () => setGamiState({...getGami()});
+  useEffect(()=>{const s=document.getElementById('mradi-splash');if(s)s.remove();},[]);
 
   // ── AI Daily Brief state (hoisted — hooks cannot live in render IIFEs) ─
   const [aiOpen,    setAiOpen]    = React.useState(false);
@@ -12398,7 +12398,7 @@ Write the morning brief now:`;
     const removeOverlay = () => { try{ document.getElementById('fcc-share-loader')?.remove(); }catch{} };
     sbLoadSnapshot(shareId).then(payload => {
       removeOverlay();
-      if(!payload){ showToast("⚠ Share link not found or has expired"); return; }
+      if(!payload){ showToast("⚠ Share link not found — it may have expired or never saved correctly"); return; }
       persist("ahp_seenApp", true); // don't show landing page on next load
       const snapProject = {
         ...payload,
@@ -12421,7 +12421,7 @@ Write the morning brief now:`;
       showToast(`✓ Shared project loaded — ${payload.site?.name||"Project"}`);
     }).catch(() => {
       removeOverlay();
-      showToast("⚠ Could not load shared project — check your connection");
+      showToast("⚠ Could not load shared project — check your connection and try again");
     });
   },[]);
 
@@ -12529,6 +12529,55 @@ Write the morning brief now:`;
     }
   },[]);
 
+  // ── Cloud-first load: runs whenever a real authenticated profile is available ──
+  // This is what makes data consistent across devices. Every time the user opens
+  // the app on any device with a real account, we pull the freshest data from
+  // Supabase and merge it with whatever is in localStorage (cloud wins if newer).
+  const [cloudSyncedUid, setCloudSyncedUid] = React.useState(null);
+  const [cloudSyncing, setCloudSyncing] = React.useState(false);
+  useEffect(()=>{
+    const uid = profile?.id;
+    if(!uid || profile?.isGuest || uid.startsWith("guest-") || uid.startsWith("local-") || uid.startsWith("demo-")) return;
+    if(uid === cloudSyncedUid) return; // already synced this session for this uid
+    if(!sbReady()) return;
+    setCloudSyncedUid(uid); // mark as in-progress so we don't double-fire
+    setCloudSyncing(true);
+    (async()=>{
+      try{
+        const cloudProjects = await sbLoadProjects(uid);
+        if(!cloudProjects?.length) return;
+        const localProjects = load("ahp_projects")||[];
+        const localById = {};
+        localProjects.forEach(p=>{ if(p.id) localById[p.id]=p; });
+        const cloudIds = new Set(cloudProjects.map(p=>p.id).filter(Boolean));
+        let newCt = 0, updatedCt = 0;
+        const merged = cloudProjects.map(cloud=>{
+          const local = localById[cloud.id];
+          if(!local){ newCt++; return cloud; }
+          const cloudTs = new Date(cloud._cloudUpdatedAt||cloud.updated_at||0).getTime();
+          const localTs  = new Date(local.updated_at||0).getTime();
+          if(cloudTs > localTs){ updatedCt++; return {...cloud}; }
+          return local;
+        });
+        // Keep local-only projects not yet pushed to cloud
+        localProjects.forEach(p=>{ if(p.id && !cloudIds.has(p.id)) merged.push(p); });
+        persist("ahp_projects", merged);
+        setProjects(merged);
+        // Refresh diaries/materials/workers for the currently active project
+        const ap = merged[activeProject] || merged[0];
+        if(ap){
+          setDiaries(ap.diaries||[]);
+          setMaterials(ap.materials||[]);
+          setWorkers(ap.workers||[]);
+        }
+        if(newCt > 0 || updatedCt > 0){
+          showToast(`☁ Synced from cloud — ${newCt > 0 ? newCt + " new" : ""}${newCt&&updatedCt?" · ":""}${updatedCt > 0 ? updatedCt + " updated" : ""}`);
+        }
+      }catch(e){ console.warn("[Mradi] Cloud sync failed:", e.message); }
+      finally{ setCloudSyncing(false); }
+    })();
+  },[profile?.id]);
+
   // ── Analytics: track user on boot / re-open ─────────────────────────────────
   useEffect(()=>{
     const p = getLocalProfile();
@@ -12634,8 +12683,7 @@ Write the morning brief now:`;
     const justDone=(col==="status"&&coerced==="done"&&prevWP?.status!=="done");
     const justComplete=(col==="progress"&&coerced===100&&(prevWP?.progress||0)<100);
     if(justDone||justComplete){
-      const {earned}=awardGami("task_complete"); refreshGami();
-      showToast(`✅ Task complete · +${earned} XP 🏗`);
+            showToast("✅ Task complete");
     } else {
       showToast("✓ Saved");
     }
@@ -12863,6 +12911,13 @@ Write the morning brief now:`;
 
       {GuestBanner}
       {OfflineSyncBanner}
+      {/* ── Cloud sync indicator ── */}
+      {cloudSyncing && (
+        <div style={{background:"var(--accent)10",borderBottom:"1px solid var(--accent)25",padding:"4px 16px",display:"flex",alignItems:"center",gap:"8px",fontSize:"12px",fontFamily:"'JetBrains Mono',monospace",color:"var(--accent)"}}>
+          <div style={{width:"8px",height:"8px",borderRadius:"50%",border:"2px solid var(--accent)",borderTopColor:"transparent",animation:"spin 0.8s linear infinite",flexShrink:0}}/>
+          <span>Syncing from cloud…</span>
+        </div>
+      )}
 
       {/* ── Trial / Renewal Banner ── */}
       {(()=>{
@@ -13006,75 +13061,7 @@ Write the morning brief now:`;
       {showOrgMgmt&&<OrgPanel profile={profile} onClose={()=>setShowOrgMgmt(false)} showToast={showToast}/>}
 
       {/* ── BADGES & ACHIEVEMENTS DRAWER ── */}
-      {showBadges&&(()=>{
-        const g = gamiState;
-        const lv = gamiLevel(g.xp||0);
-        const earned = g.badges||[];
-        return (
-          <div style={{position:"fixed",inset:0,zIndex:9800,display:"flex",alignItems:"flex-end",justifyContent:"center"}}
-            onClick={e=>{if(e.target===e.currentTarget)setShowBadges(false);}}>
-            <div style={{background:"var(--bg2,#0F0F1A)",borderRadius:"24px 24px 0 0",width:"100%",maxWidth:"520px",maxHeight:"85vh",overflow:"auto",padding:"0 0 calc(24px + env(safe-area-inset-bottom,0px))",boxShadow:"0 -8px 40px rgba(0,0,0,0.5)"}}>
-              {/* Handle */}
-              <div style={{display:"flex",justifyContent:"center",padding:"10px 0 4px"}}>
-                <div style={{width:"36px",height:"4px",borderRadius:"2px",background:"var(--border)"}}/>
-              </div>
-              {/* Header */}
-              <div style={{padding:"8px 20px 16px",borderBottom:"1px solid var(--border)"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <div>
-                    <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:"20px",fontWeight:"800",color:"var(--text)",letterSpacing:"-0.02em"}}>Achievements</div>
-                    <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"14px",color:"var(--text3)",marginTop:"2px"}}>{earned.length} of {GAMI_BADGES.length} unlocked</div>
-                  </div>
-                  <button onClick={()=>setShowBadges(false)} style={{background:"var(--border)",border:"none",borderRadius:"50%",width:"32px",height:"32px",cursor:"pointer",fontSize:"16px",color:"var(--text3)",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
-                </div>
-                {/* Level + XP summary */}
-                <div style={{marginTop:"14px",padding:"12px 14px",borderRadius:"12px",background:"linear-gradient(135deg,var(--accent)15,var(--accent)05)",border:"1px solid var(--accent)25"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
-                      <span style={{fontSize:"22px"}}>{lv.icon}</span>
-                      <div>
-                        <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"15px",fontWeight:"800",color:"var(--text)"}}>{lv.label}</div>
-                        <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:"12px",color:"var(--accent)"}}>{(g.xp||0).toLocaleString()} XP · 🔥 {g.streak||0}-day streak</div>
-                      </div>
-                    </div>
-                    {lv.next&&<div style={{fontFamily:"'Figtree',sans-serif",fontSize:"12px",color:"var(--text3)",textAlign:"right"}}><div style={{fontWeight:"700",color:"var(--text)"}}>{lv.next.label}</div><div>{lv.next.min-(g.xp||0)} XP to go</div></div>}
-                  </div>
-                  <div style={{height:"6px",background:"var(--border)",borderRadius:"99px",overflow:"hidden"}}>
-                    <div style={{height:"100%",width:`${lv.pct}%`,background:"linear-gradient(90deg,var(--accent),var(--accent)bb)",borderRadius:"99px"}}/>
-                  </div>
-                </div>
-              </div>
-              {/* Badge grid */}
-              <div style={{padding:"16px 20px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
-                {GAMI_BADGES.map(b=>{
-                  const unlocked = earned.includes(b.id);
-                  return (
-                    <div key={b.id} style={{padding:"12px",borderRadius:"12px",border:`1px solid ${unlocked?"var(--accent)30":"var(--border)"}`,background:unlocked?"var(--accent)08":"var(--bg)",opacity:unlocked?1:0.5,transition:"all 0.2s"}}>
-                      <div style={{fontSize:"24px",marginBottom:"6px",filter:unlocked?"none":"grayscale(1)"}}>{b.icon}</div>
-                      <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"13px",fontWeight:"800",color:unlocked?"var(--text)":"var(--text3)",marginBottom:"3px"}}>{b.label}</div>
-                      <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"12px",color:"var(--text3)",lineHeight:1.4}}>{b.desc}</div>
-                      {unlocked&&<div style={{marginTop:"6px",fontFamily:"'JetBrains Mono',monospace",fontSize:"10px",fontWeight:"700",color:"var(--green)"}}>✓ UNLOCKED</div>}
-                    </div>
-                  );
-                })}
-              </div>
-              {/* XP cheatsheet */}
-              <div style={{padding:"0 20px 8px"}}>
-                <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"12px",fontWeight:"800",color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"10px"}}>Earn XP</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px"}}>
-                  {Object.entries(GAMI_XP).map(([action,xp])=>(
-                    <div key={action} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 10px",borderRadius:"8px",background:"var(--bg)"}}>
-                      <span style={{fontFamily:"'Figtree',sans-serif",fontSize:"12px",color:"var(--text3)",textTransform:"capitalize"}}>{action.replace(/_/g," ")}</span>
-                      <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:"12px",fontWeight:"700",color:"var(--accent)"}}>+{xp}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-      {showShareModal&&<ShareSnapshotModal proj={proj} diaries={diaries} materials={materials} provisions={provisions} onClose={()=>setShowShareModal(false)} showToast={showToast} currentUserId={profile?.id||null}/>}
+            {showShareModal&&<ShareSnapshotModal proj={proj} diaries={diaries} materials={materials} provisions={provisions} onClose={()=>setShowShareModal(false)} showToast={showToast} currentUserId={profile?.id||null}/>}
       {showTeamRoom&&(
         <TeamRoomPanel
           proj={proj}
@@ -13803,32 +13790,16 @@ Write the morning brief now:`;
         {view==="overview"&&(
           <div style={{animation:"fadeUp 0.2s ease"}}>
 
-            {/* ══ MORNING BRIEFING — Daily summary + gamification ══ */}
+            {/* ══ MORNING BRIEFING ══ */}
             {(()=>{
               const hour = new Date().getHours();
               const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
               const userName = profile?.name?.split(" ")[0] || "Boss";
               const todayStr = new Date().toISOString().slice(0,10);
               const todayDiary = diaries.filter(d=>d.date&&d.date.slice(0,10)===todayStr);
-              const workersActive = workers.filter(w=>(w.status||"active")==="active").length || workers.length;
               const overdueWps = wps.filter(w=>w.status!=="done"&&w.dueDate&&w.dueDate<todayStr).length;
               const matLow = materials.filter(m=>m.onSite!=null&&m.plannedConsumption!=null&&m.onSite<m.plannedConsumption*0.2).length;
 
-              // Gamification
-              const g = gamiState;
-              const lv = gamiLevel(g.xp||0);
-              const nextXp = lv.next ? lv.next.min : lv.min;
-              const curXp = g.xp || 0;
-              const pct = lv.pct;
-              const streak = g.streak || 0;
-              const recentBadges = (g.badges||[]).slice(-3).map(id=>GAMI_BADGES.find(b=>b.id===id)).filter(Boolean);
-
-              // Today's action checklist
-              const doneActions = g.dailyActions||[];
-              const diaryDone = doneActions.includes(todayStr+":diary_entry");
-              const attendDone = doneActions.includes(todayStr+":attendance");
-
-              // Contextual message
               const msgs = [];
               if(overdueWps>0) msgs.push(`⚠️ ${overdueWps} overdue task${overdueWps>1?"s":""}`);
               if(matLow>0) msgs.push(`🧱 ${matLow} material${matLow>1?"s":""} low`);
@@ -13838,148 +13809,21 @@ Write the morning brief now:`;
 
               return (
                 <div className="card" style={{marginBottom:"14px",padding:"16px",background:"linear-gradient(135deg,var(--bg) 0%,var(--accent)07 100%)",border:"1px solid var(--accent)22",position:"relative",overflow:"hidden"}}>
-                  {/* Decorative stripe */}
                   <div style={{position:"absolute",top:0,left:0,width:"3px",height:"100%",background:"linear-gradient(180deg,var(--accent),var(--accent)44)",borderRadius:"3px 0 0 3px"}}/>
-
-                  {/* Top row: greeting + streak */}
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"12px",paddingLeft:"8px"}}>
-                    <div>
-                      <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"13px",fontWeight:"700",color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"3px"}}>
-                        {new Date().toLocaleDateString("en-KE",{weekday:"long",day:"numeric",month:"long"})}
-                      </div>
-                      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:"clamp(17px,4vw,21px)",fontWeight:"800",color:"var(--text)",letterSpacing:"-0.02em"}}>
-                        {greeting}, {userName} 👋
-                      </div>
-                      <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"14px",color:"var(--text3)",marginTop:"4px",lineHeight:1.5}}>
-                        {msgs.join(" · ")}
-                      </div>
+                  <div style={{paddingLeft:"8px"}}>
+                    <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"13px",fontWeight:"700",color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"3px"}}>
+                      {new Date().toLocaleDateString("en-KE",{weekday:"long",day:"numeric",month:"long"})}
                     </div>
-                    {/* Streak badge */}
-                    <div style={{textAlign:"center",flexShrink:0,paddingLeft:"12px"}}>
-                      <div style={{background:streak>=7?"linear-gradient(135deg,#FF5C00,#FF8C42)":"var(--accent)15",borderRadius:"12px",padding:"8px 12px",border:`1px solid ${streak>=7?"var(--accent)":"var(--accent)30"}`}}>
-                        <div style={{fontSize:"22px",lineHeight:1}}>{streak>=7?"🔥":streak>=3?"⚡":"📅"}</div>
-                        <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:"20px",fontWeight:"800",color:streak>=7?"#fff":"var(--accent)",lineHeight:1,marginTop:"2px"}}>{streak}</div>
-                        <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"10px",fontWeight:"700",color:streak>=7?"rgba(255,255,255,0.8)":"var(--text3)",textTransform:"uppercase",letterSpacing:"0.08em"}}>Day Streak</div>
-                      </div>
+                    <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:"clamp(17px,4vw,21px)",fontWeight:"800",color:"var(--text)",letterSpacing:"-0.02em"}}>
+                      {greeting}, {userName} 👋
+                    </div>
+                    <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"14px",color:"var(--text3)",marginTop:"4px",lineHeight:1.5}}>
+                      {msgs.join(" · ")}
                     </div>
                   </div>
-
-                  {/* XP Level bar — tap to open achievements */}
-                  <div onClick={()=>setShowBadges(true)} style={{paddingLeft:"8px",marginBottom:"14px",cursor:"pointer"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"5px"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
-                        <span style={{fontSize:"16px"}}>{lv.icon}</span>
-                        <span style={{fontFamily:"'Figtree',sans-serif",fontSize:"13px",fontWeight:"800",color:"var(--text)",letterSpacing:"0.02em"}}>{lv.label}</span>
-                      </div>
-                      <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:"12px",fontWeight:"700",color:"var(--accent)"}}>
-                        {curXp.toLocaleString()} XP{lv.next?` · ${lv.next.min-curXp} to ${lv.next.label}`:"· MAX"}
-                      </div>
-                    </div>
-                    <div style={{height:"6px",background:"var(--border)",borderRadius:"99px",overflow:"hidden"}}>
-                      <div style={{height:"100%",width:`${pct}%`,background:"linear-gradient(90deg,var(--accent),var(--accent)cc)",borderRadius:"99px",transition:"width 0.6s ease"}}/>
-                    </div>
-                  </div>
-
-                  {/* Today's action checklist */}
-                  <div style={{paddingLeft:"8px",marginBottom:recentBadges.length?"12px":"0"}}>
-                    <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"12px",fontWeight:"800",color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"7px"}}>Today's Mission</div>
-                    <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-                      {[
-                        {done:diaryDone,  icon:"📋", label:"Log Diary",  xp:50, action:()=>setView("diary")},
-                        {done:attendDone, icon:"👷", label:"Attendance", xp:20, action:()=>setView("team")},
-                        {done:todayDiary.length>0&&workersActive>0, icon:"📊", label:`${workersActive} Workers`, xp:0, action:()=>setView("team")},
-                      ].map((item,i)=>(
-                        <button key={i} onClick={item.action}
-                          style={{display:"flex",alignItems:"center",gap:"6px",padding:"6px 10px",borderRadius:"8px",border:`1px solid ${item.done?"var(--green)44":"var(--border)"}`,background:item.done?"var(--green)0a":"var(--bg2)",cursor:"pointer",transition:"all 0.15s",flexShrink:0}}>
-                          <span style={{fontSize:"14px"}}>{item.done?"✅":item.icon}</span>
-                          <span style={{fontFamily:"'Figtree',sans-serif",fontSize:"13px",fontWeight:"700",color:item.done?"var(--green)":"var(--text)"}}>{item.label}</span>
-                          {!item.done&&item.xp>0&&<span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:"10px",fontWeight:"700",color:"var(--accent)",background:"var(--accent)12",borderRadius:"4px",padding:"1px 5px"}}>+{item.xp}</span>}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Recent badges — click to open full achievement panel */}
-                  {recentBadges.length>0&&(
-                    <div onClick={()=>setShowBadges(true)} style={{paddingLeft:"8px",borderTop:"1px solid var(--border)",paddingTop:"10px",display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap",cursor:"pointer"}}>
-                      <span style={{fontFamily:"'Figtree',sans-serif",fontSize:"12px",fontWeight:"800",color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.1em",flexShrink:0}}>Badges</span>
-                      {recentBadges.map(b=>(
-                        <div key={b.id} title={b.desc}
-                          style={{display:"flex",alignItems:"center",gap:"4px",padding:"3px 8px",borderRadius:"20px",background:"var(--accent)10",border:"1px solid var(--accent)22"}}>
-                          <span style={{fontSize:"13px"}}>{b.icon}</span>
-                          <span style={{fontFamily:"'Figtree',sans-serif",fontSize:"12px",fontWeight:"700",color:"var(--text)"}}>{b.label}</span>
-                        </div>
-                      ))}
-                      <span style={{fontFamily:"'Figtree',sans-serif",fontSize:"12px",color:"var(--accent)",fontWeight:"700",marginLeft:"auto",flexShrink:0}}>View all →</span>
-                    </div>
-                  )}
                 </div>
               );
             })()}
-
-            {/* ══ AI DAILY BRIEF — Anthropic-powered morning summary ══ */}
-            {(()=>{
-              const todayStr = new Date().toISOString().slice(0,10);
-              const todayDiary = diaries.filter(d=>d.date&&d.date.slice(0,10)===todayStr);
-              const workersNow = workers.filter(w=>(w.status||"active")==="active").length || workers.length;
-              const overdueCt  = wps.filter(w=>w.status!=="done"&&w.endDate&&w.endDate<todayStr).length;
-              const snap = {
-                project:site.name, location:site.location||"", progress:totalProgress,
-                daysLeft, workers:workersNow, overdue:overdueCt, risks:openRisks,
-                phases:phases.map(p=>({name:p.name,status:p.status,progress:p.progress})).slice(0,6),
-                todayDiary:todayDiary.map(d=>d.title||d.notes||"").filter(Boolean).slice(0,3),
-                matAlerts,
-              };
-              const handleToggle = () => {
-                if(!aiOpen){ setAiOpen(true); if(!aiText&&!aiLoading) generateBrief(snap); }
-                else setAiOpen(false);
-              };
-              const handleRetry = () => generateBrief(snap);
-              return (
-                <div style={{marginBottom:"14px",borderRadius:"14px",border:"1px solid var(--border)",background:"var(--bg2)",overflow:"hidden"}}>
-                  {/* Header row — always visible */}
-                  <button onClick={handleToggle}
-                    style={{width:"100%",display:"flex",alignItems:"center",gap:"10px",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}>
-                    <div style={{width:"32px",height:"32px",borderRadius:"10px",background:"linear-gradient(135deg,#7C3AED,#A855F7)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"17px",flexShrink:0}}>✨</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"14px",fontWeight:"800",color:"var(--text)"}}>AI Daily Brief</div>
-                      <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"12px",color:"var(--text3)"}}>Claude-powered morning summary for your site</div>
-                    </div>
-                    <div style={{display:"flex",alignItems:"center",gap:"8px",flexShrink:0}}>
-                      {aiText&&!aiOpen&&<span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:"10px",fontWeight:"700",color:"var(--green)",background:"var(--green)15",borderRadius:"4px",padding:"2px 6px"}}>READY</span>}
-                      <span style={{fontSize:"16px",color:"var(--text3)",transform:aiOpen?"rotate(180deg)":"none",transition:"transform 0.2s"}}>▾</span>
-                    </div>
-                  </button>
-                  {/* Expanded panel */}
-                  {aiOpen&&(
-                    <div style={{padding:"0 16px 14px",borderTop:"1px solid var(--border)"}}>
-                      {aiLoading&&(
-                        <div style={{display:"flex",alignItems:"center",gap:"10px",padding:"14px 0",color:"var(--text3)"}}>
-                          <div style={{width:"16px",height:"16px",border:"2px solid #A855F7",borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.8s linear infinite",flexShrink:0}}/>
-                          <span style={{fontFamily:"'Figtree',sans-serif",fontSize:"14px"}}>Briefing your site…</span>
-                        </div>
-                      )}
-                      {aiError&&!aiLoading&&(
-                        <div style={{padding:"12px 0",display:"flex",alignItems:"center",gap:"8px"}}>
-                          <span style={{color:"var(--red)",fontSize:"14px",fontFamily:"'Figtree',sans-serif"}}>{aiError}</span>
-                          <button onClick={handleRetry} style={{background:"var(--accent)",color:"#fff",border:"none",borderRadius:"6px",padding:"4px 10px",fontSize:"13px",fontWeight:"700",cursor:"pointer",flexShrink:0}}>Retry</button>
-                        </div>
-                      )}
-                      {aiText&&!aiLoading&&(
-                        <div style={{paddingTop:"12px"}}>
-                          <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"14px",color:"var(--text)",lineHeight:1.75,whiteSpace:"pre-wrap"}}>{aiText}</div>
-                          <button onClick={handleRetry}
-                            style={{marginTop:"12px",background:"none",border:"1px solid var(--border)",borderRadius:"8px",padding:"5px 12px",fontFamily:"'Figtree',sans-serif",fontSize:"12px",fontWeight:"700",color:"var(--text3)",cursor:"pointer"}}>
-                            ↺ Regenerate
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
             <div className="mob-hero card" style={{marginBottom:"14px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"12px",marginBottom:"14px"}}>
                 <div style={{flex:1,minWidth:0}}>
@@ -14101,8 +13945,7 @@ Write the morning brief now:`;
               const todayEntry = diaries.filter(d=>d.date&&d.date.slice(0,10)===todayStr).slice(-1)[0]||diaries.slice(-1)[0];
               const handleGenerate = () => {
                 if(hasAddon("reports")) {
-                  const {earned}=awardGami("report_gen"); refreshGami();
-                  showToast(`📊 Generating report · +${earned} XP`);
+                                    showToast("📊 Generating report…");
                   setView("report");
                 } else {
                   setShowPremium("reports");
@@ -14616,7 +14459,7 @@ Write the morning brief now:`;
         )}
 
         {/* ── MATERIALS ── */}
-        {view==="materials"&&<MaterialsView materials={materials} setMaterials={isDemoUser?(()=>showToast("🔒 Demo is view-only — sign up to edit materials")):m=>{const prev=materials.length;setMaterials(m);if(m.length>prev){const {earned}=awardGami("material_add");refreshGami();showToast(`✓ Material added · +${earned} XP`);}else{showToast("✓ Materials updated");}}}/>}
+        {view==="materials"&&<MaterialsView materials={materials} setMaterials={isDemoUser?(()=>showToast("🔒 Demo is view-only — sign up to edit materials")):m=>{const prev=materials.length;setMaterials(m);showToast(prev<m.length?"✓ Material added":"✓ Materials updated");}}/>}
 
         {/* ── PROVISIONS ── */}
         {view==="provisions"&&(
@@ -14641,7 +14484,7 @@ Write the morning brief now:`;
         )}
 
         {/* ── DIARY ── */}
-        {view==="diary"&&<DiaryView diaries={diaries} setDiaries={isDemoUser?(()=>showToast("🔒 Demo is view-only — sign up to log entries")):d=>{setDiaries(d);const {earned}=awardGami("diary_entry");refreshGami();showToast(`✓ Diary entry saved · +${earned} XP 🏗`);}} team={team} workers={workers} currentUserId={profile?.id||null} site={site}/>}
+        {view==="diary"&&<DiaryView diaries={diaries} setDiaries={isDemoUser?(()=>showToast("🔒 Demo is view-only — sign up to log entries")):d=>{setDiaries(d);showToast("✓ Diary entry saved");}} team={team} workers={workers} currentUserId={profile?.id||null} site={site}/>}
         {view==="timeline"&&(hasAddon("timeline")
           ? <PhotoTimeline diaries={diaries} site={site}/>
           : <PaywallGate feature="timeline" planNeeded="pro" onUpgrade={()=>setShowPlanPayment(true)}/>
@@ -14789,7 +14632,7 @@ Write the morning brief now:`;
 
         {/* ── TEAM ── */}
         {view==="team"&&(hasAddon("gps")
-          ? <TeamAttendanceView site={site} workers={workers} setWorkers={isDemoUser?(()=>showToast("🔒 Demo is view-only — sign up to log attendance")):(w)=>{setWorkers(w);awardGami("attendance");refreshGami();}} team={team} wps={wps} projectId={projects[activeProject]?.id||"local"} showToast={showToast}/>
+          ? <TeamAttendanceView site={site} workers={workers} setWorkers={isDemoUser?(()=>showToast("🔒 Demo is view-only — sign up to log attendance")):(w)=>{setWorkers(w);}} team={team} wps={wps} projectId={projects[activeProject]?.id||"local"} showToast={showToast}/>
           : <PaywallGate feature="gps" planNeeded="pro" onUpgrade={()=>setShowPlanPayment(true)}/>
         )}
 
@@ -14848,7 +14691,15 @@ function AutoReportModal({entry, site, team, workers, onClose}){
   const [copied, setCopied] = useState(false);
   const textRef = useRef(null);
 
-  const allPeople = [...team, ...(workers||[])];
+
+  // Auto-open new entry form if today has no entries yet
+  React.useEffect(()=>{
+    if(selectedDate===todayStr && !(entriesByDate[todayStr]||[]).length && !showAdd){
+      newEntry(todayStr);
+    }
+  },[]);
+
+    const allPeople = [...team, ...(workers||[])];
   const authorMember = allPeople.find(m=>m.id===entry.author)||{name:entry.author||"Site Manager"};
   const totalWorkers = entry.gangsPresent || (entry.workforce||[]).reduce((s,w)=>s+(Number(w.count)||0),0);
   const totalHours   = (entry.works||[]).reduce((s,w)=>s+(w.manHours||0),0);
@@ -15474,7 +15325,7 @@ function TeamAttendanceView({ site, workers, setWorkers, team, wps, projectId, s
   // workers = on-site workforce registry (masons, labourers etc.)
   // team    = professional team (PM, SE, AR etc.) — used only in Workload tab
   const activeWorkers = workers.filter(w => (w.status||"active") === "active");
-  const [attTab, setAttTab] = useState("today");
+  const [attTab, setAttTab] = useState("dailyreg");
   const todayStr = new Date().toISOString().slice(0,10);
   const [attRecords, setAttRecords] = useState(() => loadAttendance(projectId));
   const todayRecs = attRecords.filter(r => r.date === todayStr);
@@ -15563,91 +15414,13 @@ function TeamAttendanceView({ site, workers, setWorkers, team, wps, projectId, s
 
       {/* ── TAB STRIP ── */}
       <div style={{display:"flex",gap:"8px",marginBottom:"18px",borderBottom:"2px solid var(--border)",paddingBottom:"14px",overflowX:"auto"}}>
-        {[["today","📅 Today"],["dailyreg","📋 Register"],["history","📜 History"],["team","📊 Workload"],["registry","👷 Workers"]].map(([k,l]) => (
+        {[["dailyreg","📋 Register"],["registry","👷 Workers"]].map(([k,l]) => (
           <button key={k} onClick={() => setAttTab(k)}
             style={{padding:"11px 20px",borderRadius:"9px",border:"2px solid",whiteSpace:"nowrap",fontSize:"15px",fontWeight:"800",cursor:"pointer",flexShrink:0,letterSpacing:"-0.01em",borderColor:attTab===k?"var(--accent)":"var(--border)",color:attTab===k?"var(--accent)":"var(--text2)",background:attTab===k?"var(--accent-bg)":"var(--surface)"}}>
             {l}
           </button>
         ))}
       </div>
-
-      {/* ── TODAY TAB ── */}
-      {attTab === "today" && (
-        <div style={{display:"flex",flexDirection:"column",gap:"14px"}}>
-          {activeWorkers.map(m => {
-            const lastRec  = getWorkerStatus(m.id);
-            const isIn     = lastRec && lastRec.action === "in";
-            const ldIn     = attLoading[m.id + "in"];
-            const ldOut    = attLoading[m.id + "out"];
-            const msg      = attMsg[m.id];
-            const bc       = isIn ? "var(--green)" : lastRec ? "var(--text3)" : "var(--border)";
-            const timeStr  = lastRec ? new Date(lastRec.ts).toLocaleTimeString("en-KE",{hour:"2-digit",minute:"2-digit"}) : null;
-            return (
-              <div key={m.id} className="card" style={{
-                padding:"20px",
-                borderLeft:`6px solid ${bc}`,
-                background: isIn ? "color-mix(in srgb,var(--green) 4%,var(--card))" : "var(--card)"
-              }}>
-                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"10px",marginBottom:"14px"}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:"22px",fontWeight:"900",color:"var(--text)",lineHeight:1.15,letterSpacing:"-0.02em"}}>{m.name}</div>
-                    <div style={{fontSize:"16px",fontWeight:"700",color:"var(--text2)",marginTop:"4px"}}>{m.trade||m.role}{m.org?" · "+m.org:""}</div>
-                  </div>
-                  <div style={{flexShrink:0,padding:"7px 16px",borderRadius:"100px",background:isIn?"var(--green)22":"var(--surface)",border:`2px solid ${bc}`,fontSize:"14px",fontWeight:"900",color:bc,whiteSpace:"nowrap"}}>
-                    {isIn?"✅ ON SITE":lastRec?"🕐 LEFT":"⬜ ABSENT"}
-                  </div>
-                </div>
-
-                {(timeStr||msg) && (
-                  <div style={{padding:"12px 16px",borderRadius:"10px",background:"var(--surface)",border:"1px solid var(--border)",marginBottom:"14px"}}>
-                    {msg ? (
-                      <div style={{fontSize:"16px",fontWeight:"800",color:msg.startsWith("⚠")?"var(--red)":"var(--green)"}}>{msg}</div>
-                    ) : timeStr && (
-                      <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
-                        <span style={{fontSize:"22px"}}>{isIn?"⏱️":"🕑"}</span>
-                        <div>
-                          <div style={{fontSize:"13px",fontWeight:"800",color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.06em"}}>{isIn?"Clocked in at":"Clocked out at"}</div>
-                          <div style={{fontSize:"22px",fontWeight:"900",color:"var(--text)",letterSpacing:"-0.02em",lineHeight:1.1}}>{timeStr}{lastRec.verified&&<span style={{fontSize:"14px",color:"var(--green)",fontWeight:"800",marginLeft:"8px"}}>📍 GPS verified</span>}</div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {!timeStr&&!msg&&(
-                  <div style={{fontSize:"15px",fontWeight:"700",color:"var(--text3)",marginBottom:"14px"}}>⬜ Has not arrived yet today</div>
-                )}
-
-                {!isIn ? (
-                  <button className="btn-primary"
-                    style={{width:"100%",padding:"17px",fontSize:"19px",fontWeight:"900",letterSpacing:"-0.01em",borderRadius:"12px",minHeight:"58px"}}
-                    onClick={()=>doClockAction(m,"in")} disabled={ldIn}>
-                    {ldIn?"📡 Getting location…":"✅ CLOCK IN"}
-                  </button>
-                ) : (
-                  <button
-                    style={{width:"100%",padding:"17px",fontSize:"19px",fontWeight:"900",letterSpacing:"-0.01em",borderRadius:"12px",minHeight:"58px",background:"none",border:"2.5px solid var(--amber)",color:"var(--amber)",cursor:"pointer",fontFamily:"'Figtree',sans-serif"}}
-                    onClick={()=>doClockAction(m,"out")} disabled={ldOut}>
-                    {ldOut?"📡 Getting location…":"🕐 CLOCK OUT"}
-                  </button>
-                )}
-              </div>
-            );
-          })}
-          {workers.length === 0 && (
-            <div className="card" style={{padding:"40px",textAlign:"center"}}>
-              <div style={{fontSize:"40px",marginBottom:"12px"}}>👷</div>
-              <div style={{fontSize:"20px",fontWeight:"900",color:"var(--text)",marginBottom:"8px"}}>No workers added yet</div>
-              <div style={{fontSize:"16px",fontWeight:"600",color:"var(--text2)",marginBottom:"20px"}}>Go to the Workers tab to build your registry first.</div>
-              <button className="btn-primary" style={{padding:"14px 28px",fontSize:"16px",fontWeight:"800"}} onClick={()=>setAttTab("registry")}>👷 Add Workers</button>
-            </div>
-          )}
-          {workers.length > 0 && activeWorkers.length === 0 && (
-            <div className="card" style={{padding:"32px",textAlign:"center",color:"var(--text2)",fontSize:"16px",fontWeight:"700"}}>
-              All workers are inactive. Update status in the Workers tab.
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ── DAILY REGISTER TAB ── */}
       {attTab === "dailyreg" && (
@@ -15657,92 +15430,6 @@ function TeamAttendanceView({ site, workers, setWorkers, team, wps, projectId, s
           todayStr={todayStr}
           showToast={showToast}
         />
-      )}
-
-      {/* ── WORKLOAD TAB ── */}
-      {attTab === "team" && (
-        <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
-          {team.map(m => {
-            const assignments = wps.filter(w => w.assignee === m.id && w.status !== "done");
-            const lc = m.load > 90 ? "var(--red)" : m.load > 80 ? "var(--amber)" : "var(--green)";
-            return (
-              <div key={m.id} className="mob-member-card">
-                <div style={{display:"flex",alignItems:"center",gap:"14px",marginBottom:"12px"}}>
-                  <div style={{width:"52px",height:"52px",borderRadius:"14px",background:`${lc}15`,border:`2px solid ${lc}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"15px",fontWeight:"900",color:lc,fontFamily:"'JetBrains Mono',monospace",flexShrink:0}}>{m.id}</div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:"16px",fontWeight:"800",color:"var(--text)",lineHeight:1.2}}>{m.name}</div>
-                    <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"15px",fontWeight:"700",color:"var(--text3)",textTransform:"uppercase",marginTop:"2px"}}>{m.role}</div>
-                    <Badge label={m.org} color={SCC["in-progress"]}/>
-                  </div>
-                  <div style={{textAlign:"right",flexShrink:0}}>
-                    <div style={{fontSize:"30px",fontWeight:"900",color:lc,lineHeight:1}}>{m.load}%</div>
-                    <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"15px",fontWeight:"700",color:"var(--text3)"}}>LOAD</div>
-                  </div>
-                </div>
-                <Bar value={m.load} color={lc} h={6}/>
-                {assignments.length > 0 && (
-                  <div style={{marginTop:"12px"}}>
-                    <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"15px",fontWeight:"700",color:"var(--text3)",textTransform:"uppercase",letterSpacing:"0.09em",marginBottom:"8px"}}>Active Packages · {assignments.length}</div>
-                    <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
-                      {assignments.map(w => (
-                        <div key={w.id} style={{display:"flex",gap:"10px",alignItems:"center",padding:"10px 12px",background:"var(--bg)",borderRadius:"12px",borderLeft:`3px solid ${SCC[w.status]||"#A0AEC0"}`}}>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:"15px",fontWeight:"700",color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{w.name}</div>
-                            <div style={{fontFamily:"'Figtree',sans-serif",fontSize:"15px",fontWeight:"700",color:"var(--text3)",marginTop:"2px"}}>{w.phase} · {w.trade}</div>
-                          </div>
-                          <Badge label={w.status} color={SCC[w.status]||"#A0AEC0"}/>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── HISTORY TAB ── */}
-      {attTab === "history" && (
-        <div>
-          {attRecords.length === 0 && (
-            <div className="card" style={{padding:"32px",textAlign:"center",color:"var(--text3)",fontFamily:"'Figtree',sans-serif",fontSize:"14px",fontWeight:"700"}}>No attendance records yet.</div>
-          )}
-          {attRecords.length > 0 && (
-            <div className="card" style={{padding:"14px",overflowX:"auto"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
-                <SectionTitle>Attendance Log — {attRecords.length} records</SectionTitle>
-                <button className="btn-ghost" style={{fontSize:"15px",padding:"4px 10px"}} onClick={() => {
-                  const csv = ["ID,Name,Action,Date,Time,Lat,Lng,Accuracy,Distance(m),Verified"].concat(
-                    [...attRecords].reverse().map(r =>
-                      `${r.workerId},${r.workerName},${r.action},${r.date},${new Date(r.ts).toLocaleTimeString("en-KE")},${r.lat||""},${r.lng||""},${r.accuracy||""},${r.distanceM!=null?r.distanceM:""},${r.verified?"Yes":"No"}`
-                    )
-                  ).join("\n");
-                  const a = document.createElement("a");
-                  a.href = "data:text/csv," + encodeURIComponent(csv);
-                  a.download = "mradi_attendance_" + todayStr + ".csv";
-                  a.click();
-                }}>⬇ Export CSV</button>
-              </div>
-              <table>
-                <thead><tr><th>Worker</th><th>Action</th><th>Date</th><th>Time</th><th className="hide-mobile">Accuracy</th><th className="hide-mobile">Distance</th><th>Verified</th></tr></thead>
-                <tbody>
-                  {[...attRecords].reverse().slice(0,100).map(r => (
-                    <tr key={r.id}>
-                      <td style={{fontWeight:"700",color:"var(--text)"}}>{r.workerName} <span style={{color:"var(--text3)",fontSize:"15px"}}>({r.workerId})</span></td>
-                      <td><Badge label={r.action==="in"?"CLOCK IN":"CLOCK OUT"} color={r.action==="in"?"var(--green)":"var(--text4)"}/></td>
-                      <td style={{fontFamily:"'Figtree',sans-serif",fontSize:"14px",fontWeight:"700"}}>{r.date}</td>
-                      <td style={{fontFamily:"'Figtree',sans-serif",fontSize:"14px",fontWeight:"700"}}>{new Date(r.ts).toLocaleTimeString("en-KE",{hour:"2-digit",minute:"2-digit"})}</td>
-                      <td className="hide-mobile" style={{fontFamily:"'Figtree',sans-serif",fontSize:"14px",fontWeight:"700",color:"var(--text3)"}}>{r.accuracy != null ? r.accuracy + "m" : "—"}</td>
-                      <td className="hide-mobile" style={{fontFamily:"'Figtree',sans-serif",fontSize:"14px",fontWeight:"700",color:"var(--text3)"}}>{r.distanceM != null ? r.distanceM + "m" : "—"}</td>
-                      <td>{r.verified ? <Badge label="GPS ✓" color="var(--green)"/> : <Badge label="No fence" color="var(--text4)"/>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
       )}
 
       {/* ── REGISTRY TAB ── */}
